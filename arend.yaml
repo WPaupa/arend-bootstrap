@@ -1,0 +1,4 @@
+langVersion: 1.11
+sourcesDir: src
+binariesDir: bin
+dependencies: []
