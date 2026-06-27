@@ -1,0 +1,32 @@
+\import Data.List (List)
+\import Data.Maybe
+
+\data LevelType
+  | PLevel
+  | HLevel
+
+\data LevelVar
+  | LP
+  | LH
+  | NamedLVar LevelType String Int Int
+  | InferLVar LevelType
+
+\data Level
+  | LMax (v : Maybe LevelVar) (offset : Int) (constant : Int) -- max (v + offset, constant)
+  | LInfinity
+
+\record Sort {
+  | lp : Level
+  | lh : Level
+}
+
+\data LevelArgs
+  | LArgPair Sort
+  | LArgList (List Level)
+  | LArgEmpty
+
+\type LevelSubst => LevelVar -> Level
+
+\func Prop => \new Sort { | lp => LMax nothing 0 0 | lh => LMax nothing 0 -1}
+\func Set (l : Level) => \new Sort { | lp => l | lh => LMax nothing 0 0}
+\func stdLevel => \new Sort { | lp => LMax (just LP) 0 0 | lh => LMax (just LH) 0 0}

@@ -1,0 +1,102 @@
+\import ArendAST.Level
+\import Data.Bool
+\import Data.List (List)
+\import Data.Maybe
+
+{-
+\record Var {
+  | VName : String
+  | VType : Expr
+  | VEvaluation : Maybe Expr
+}
+-}
+
+-- TODO: figure out how to change Var, Clause, LetClause into records; decide whether to use Var or String in calls
+
+\data Var : \Set0
+  | dVar (VName : String) (VType : Expr) (VEvaluation : Maybe Expr)
+
+\data ParamList : \Set0
+  | PLEmpty
+  | PLTyped (isExplicit : Bool) (var : Var) (type : Expr) (tail : ParamList)
+  | PLUntyped                   (var : Var)               (tail : ParamList)
+
+\data Expr : \Set0
+  -- Atoms
+  | EVar Var
+  | EInt Int
+  | EString String
+  -- | EInfer ?? (Maybe Expr)
+  -- TODO
+
+  -- Functions
+  | EApp Expr Expr (isExplicit : Bool)
+  | ELam ParamList Expr (resultSort : Sort)
+
+  -- Tuples
+  | ETuple (elements : List Expr) (type : Expr)
+  | EProj Expr Nat (isProperty : Bool)
+
+  -- Calls
+  | EFunCall Var LevelArgs (List Expr)
+  | EConsCall Var LevelArgs (typeArgs : List Expr) (consArgs : List Expr)
+  | EDataCall Var LevelArgs (List Expr)
+  | EFieldCall Var Expr
+  | EClassCall Var LevelArgs (implementations : String -> Expr) Sort Var -- cannot be impls:Var->Expr (positivity)
+
+  -- Records
+  | ENew (parent : Maybe Expr) Expr
+
+  -- Arrays
+  | EArray LevelArgs (elemType : Expr) (elems : List Expr) (tail : Maybe Expr)
+
+  -- Paths
+  | EPath LevelArgs Expr Expr
+  | EPathAt Expr Expr
+
+  -- Patterns
+  | ECase (isSFunc : Bool) ParamList (returnType : Expr) (returnLevel : Maybe Expr) Match (args : List Expr)
+  | ELet (isSFunc : Bool) (List LetClause) (in : Expr)
+
+  -- Wrappers
+  | ETyped (value : Expr) (type : Expr)
+  | EBox (value : Expr) (type : Expr)
+  | EPEval Expr
+  -- | ESubst Expr ExprSubst LevelSubst
+  -- can't be here, because ExprSubst has
+  -- Expr non-positively (in Var), TODO
+
+  -- Types
+  | EUniv Sort
+  | EPiType ParamList Expr Sort
+  | ESigmaType ParamList Sort
+  -- \type synonym
+  | EType (type : Var) LevelArgs (clauseNo : Int) (args : List Expr) (underlying : Expr)
+  | ETypeDestr (type : Var) Expr
+
+  -- Errors
+  | EError (Maybe Expr)
+  | EGoal
+
+\data Match : \Set0
+  | NoMatch Expr
+  | DoMatch (List Clause) -- TODO ElimTree?
+  | IntervalMatch (nparams : Nat) (List (\Sigma (vleft : Maybe Expr) (vright : Maybe Expr))) (fallback : Maybe Match)
+
+\data Clause : \Set0
+  | cClause (pats : List Pattern) (body : Maybe Expr)
+
+\data Pattern : \Set0
+  | PVar Var
+  | PConstr Var (List Pattern)
+  | PAbsurd
+
+\data LetClause : \Set0
+  | cLetClause (name : LetPattern) (body : Expr) (type : Maybe Expr) (isSFunc : Bool)
+
+\data LetPattern : \Set0
+  | LPName String
+  | LPTuple (List LetPattern)
+  | LPRecord (List (\Sigma (field : String) (pat : LetPattern)))
+
+\func ExprSubst : \Set0 => Var -> Expr
