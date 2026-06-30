@@ -1,0 +1,27 @@
+\import ArendAST.Expression
+\import ArendAST.Level
+\import Data.Bool
+\import Data.List (List)
+\import Data.Maybe
+
+\data Def : \Set0
+  | DFunc FuncDef
+  | DData DataDef
+  | DClass ClassDef
+  | DField FieldDef
+  | DCons ConsDef
+
+\data FuncDef : \Set0
+  | cFuncDef (name : String) (params : ParamList) (resultType : Expr) (truncLevel : Maybe Expr) (body : Maybe Match) (isSFunc : Bool)
+
+\data DataDef : \Set0
+  | cDataDef (name : String) (params : ParamList) (sort : Sort) (constrs : List ConsDef) (trunc : Maybe Int) (isSFunc : Bool)
+
+\data ClassDef : \Set0
+  | cClassDef (name : String) (supers : List ClassDef) (fields : List FieldDef) (impls : String -> Expr) (overrides : String -> Expr) (coercing : Maybe String) Sort (isRecord : Bool)
+
+\data FieldDef : \Set0
+  | cFieldDef (name : String) (parent : String) (type : Expr) (isSFunc : Bool)
+
+\data ConsDef : \Set0
+  | cConsDef (name : String) (datatype : String) (params : ParamList) (patterns : Maybe (List Pattern)) (intervalmatch : Maybe Match)
