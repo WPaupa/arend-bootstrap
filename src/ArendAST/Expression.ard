@@ -2,16 +2,7 @@
 \import Data.Bool
 \import Data.List (List)
 \import Data.Maybe
-
-{-
-\record Var {
-  | VName : String
-  | VType : Expr
-  | VEvaluation : Maybe Expr
-}
--}
-
--- TODO: figure out how to change Var, Clause, LetClause into records; decide whether to use Var or String in calls
+\import Data.Or
 
 \data Var : \Set0
   | dVar (VName : String) (VType : Expr) (VEvaluation : Maybe Expr)
@@ -26,8 +17,7 @@
   | EVar Var
   | EInt Int
   | EString String
-  -- | EInfer ?? (Maybe Expr)
-  -- TODO
+  | EInfer (Or InferenceVar Expr)
 
   -- Functions
   | EApp Expr Expr (isExplicit : Bool)
@@ -62,9 +52,7 @@
   | ETyped (value : Expr) (type : Expr)
   | EBox (value : Expr) (type : Expr)
   | EPEval Expr
-  -- | ESubst Expr ExprSubst LevelSubst
-  -- can't be here, because ExprSubst has
-  -- Expr non-positively (in Var), TODO
+  | ESubst Expr (List (\Sigma Var Expr)) LevelSubst
 
   -- Types
   | EUniv Sort
@@ -99,4 +87,7 @@
   | LPTuple (List LetPattern)
   | LPRecord (List (\Sigma (field : String) (pat : LetPattern)))
 
-\func ExprSubst : \Set0 => Var -> Expr
+\data InferenceVar : \Set0
+  -- TODO expand or delete
+
+\func ExprSubst : \Set0 => List (\Sigma Var Expr)

@@ -25,7 +25,7 @@
   | LArgList (List Level)
   | LArgEmpty
 
-\type LevelSubst => LevelVar -> Level
+\type LevelSubst => List (\Sigma LevelVar Level)
 
 \func Prop => \new Sort { | lp => LMax nothing 0 0 | lh => LMax nothing 0 -1}
 \func Set (l : Level) => \new Sort { | lp => l | lh => LMax nothing 0 0}
