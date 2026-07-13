@@ -1,0 +1,31 @@
+\import ArendAST.Expression
+\import ArendAST.Level
+\import ArendAST.Typecheck.Env
+\import Utilities.Monad
+\import Utilities.Monad.Reader
+
+\data CheckError
+  | ErrUnboundLocal Nat
+  | ErrUnknownGlobal Var
+  | ErrNotPi Expr
+  | ErrNotSigma Expr
+  | ErrNotUniv Expr
+  | ErrInfinityUniverse
+  | ErrPropLevelNonZero Sort
+  | ErrTypeMismatch Expr Expr
+  | ErrUnknownType
+  | ErrArity Nat Nat                    -- expected spine length, actual
+  | ErrBadPattern
+  | ErrNonAbsurd
+  | ErrLevelParamNotAllowed LevelVar
+
+\data Result (A : \Type)
+  | ok A
+  | err CheckError
+
+\instance ResultMonad : Monad Result
+  | return a => ok a
+  | >>= r f  => \case r \with { | ok a => f a | err e => err e }
+
+\func Env (A : \Set) : \Set => ReaderT CheckEnv Result A
+\func throw {A : \Set} (e : CheckError) : Env A => liftReader (err e)

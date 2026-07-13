@@ -1,0 +1,18 @@
+\import ArendAST.Expression
+\import ArendAST.Typecheck.Error
+\import Data.Bool
+\import Data.Maybe
+
+\func varType (_ : Var) : Expr
+  | GlobalVar _ _ t _ => t
+  | LocalVar _ _ t _  => t
+
+\func letClauseVar (_ : LetClause) : Result Var
+  | cLetClause name body (just type) true => letPatternVar type name (just body)
+  | cLetClause name body (just type) false => letPatternVar type name nothing
+  | _ => err ErrUnknownType \where {
+  \func letPatternVar (rtype : Expr) (pat : LetPattern) (body : Maybe Expr) : Result Var \elim pat
+    | LPName name id => ok (GlobalVar name id rtype body)
+    | LPTuple l => err ErrUnknownType
+    | LPRecord l => err ErrUnknownType -- TODO
+}

@@ -1,0 +1,33 @@
+\import Utilities.Monad
+
+
+\record Reader (R A : \Set)
+  | runReader : R -> A
+
+\instance ReaderMonad {R : \Set} : Monad (Reader R)
+  | return a => \new Reader { | runReader => \lam _ => a }
+  | >>= x f  => \new Reader { | runReader => \lam r => (f (x.runReader r)).runReader r }
+
+\func ask {R : \Set} : Reader R R
+  => \new Reader { | runReader => \lam r => r }
+
+\func local {R A : \Set} (f : R -> R) (x : Reader R A) : Reader R A
+  => \new Reader { | runReader => \lam r => x.runReader (f r)}
+
+
+
+\record ReaderT (R : \Set) (M : \Set -> \Set) (A : \Set)
+  | runReaderT : R -> M A
+
+\instance ReaderTMonad {R : \Set} {M : Monad} : Monad (ReaderT R M)
+  | return a => \new ReaderT { | runReaderT => \lam _ => return a }
+  | >>= x f  => \new ReaderT { | runReaderT => \lam r => x.runReaderT r >>= \lam a => (f a).runReaderT r }
+
+\func askT {R : \Set} {M : Monad} : ReaderT R M R
+  => \new ReaderT { | runReaderT => \lam r => return r }
+
+\func localT {R : \Set} {M : Monad} {A : \Set} (f : R -> R) (x : ReaderT R M A) : ReaderT R M A
+  => \new ReaderT { | runReaderT => \lam r => x.runReaderT (f r) }
+
+\func liftReader {R : \Set} {M : Monad} {A : \Set} (x : M A) : ReaderT R M A
+  => \new ReaderT { | runReaderT => \lam _ => x }

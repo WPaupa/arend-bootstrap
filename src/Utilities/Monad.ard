@@ -1,0 +1,19 @@
+\import Data.List
+
+\class Monad (M : \Set -> \Set)
+  | return {A : \Set} : A -> M A
+  | \infixl 1 >>= {A B : \Set} : M A -> (A -> M B) -> M B
+
+\func \infixl 1 >> {M : Monad} {A B : \Set} (x : M A) (y : M B) : M B
+  => x >>= \lam _ => y
+
+\func fmapM {M : Monad} {A B : \Set} (f : A -> B) (x : M A) : M B
+  => x >>= \lam a => return (f a)
+
+\func forEachM {M : Monad} {A : \Set} (f : A -> M (\Sigma)) (xs : List A) : M (\Sigma) \elim xs
+  | nil     => return ()
+  | x :: xs => f x >> forEachM f xs
+
+\func traverseM {M : Monad} {A B : \Set} (f : A -> M B) (xs : List A) : M (List B) \elim xs
+  | nil     => return nil
+  | x :: xs => f x >>= \lam y => traverseM f xs >>= \lam ys => return (y :: ys)
