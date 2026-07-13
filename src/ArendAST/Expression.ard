@@ -8,10 +8,6 @@
   | GlobalVar (VName : String) (VId : Nat)   (VType : Expr) (VEvaluation : Maybe Expr)
   | LocalVar  (VName : String) (index : Nat) (VType : Expr) (VEvaluation : Maybe Expr)
 
-\data ParamList : \Set0
-  | PLEmpty
-  | PLTyped (isExplicit : Bool) (var : Var) (type : Expr) (tail : ParamList)
-
 \data Expr : \Set0
   -- Atoms
   | EVar Var
@@ -20,7 +16,7 @@
 
   -- Functions
   | EApp Expr Expr (isExplicit : Bool)
-  | ELam ParamList Expr (resultSort : Sort)
+  | ELam (List Var) Expr (resultSort : Sort)
 
   -- Tuples
   | ETuple (elements : List Expr) (type : Expr)
@@ -44,7 +40,7 @@
   | EPathAt Expr Expr
 
   -- Patterns
-  | ECase (isSFunc : Bool) ParamList (returnType : Expr) (returnLevel : Maybe Expr) Match (args : List Expr)
+  | ECase (isSFunc : Bool) (List Var) (returnType : Expr) (returnLevel : Maybe Expr) Match (args : List Expr)
   | ELet (isSFunc : Bool) (List LetClause) (in : Expr)
 
   -- Wrappers
@@ -54,8 +50,8 @@
 
   -- Types
   | EUniv Sort
-  | EPiType ParamList Expr Sort
-  | ESigmaType ParamList Sort
+  | EPiType (List Var) Expr Sort
+  | ESigmaType (List Var) Sort
   -- \type synonym
   | EType (type : Var) LevelArgs (clauseNo : Int) (args : List Expr) (underlying : Expr)
   | ETypeDestr (type : Var) Expr
