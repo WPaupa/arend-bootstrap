@@ -5,12 +5,12 @@
 \import Data.Or
 
 \data Var : \Set0
-  | dVar (VName : String) (VType : Expr) (VEvaluation : Maybe Expr)
+  | GlobalVar (VName : String) (VId : Nat)   (VType : Expr) (VEvaluation : Maybe Expr)
+  | LocalVar  (VName : String) (index : Nat) (VType : Expr) (VEvaluation : Maybe Expr)
 
 \data ParamList : \Set0
   | PLEmpty
   | PLTyped (isExplicit : Bool) (var : Var) (type : Expr) (tail : ParamList)
-  | PLUntyped                   (var : Var)               (tail : ParamList)
 
 \data Expr : \Set0
   -- Atoms
@@ -31,7 +31,7 @@
   | EConsCall Var LevelArgs (typeArgs : List Expr) (consArgs : List Expr)
   | EDataCall Var LevelArgs (List Expr)
   | EFieldCall Var Expr
-  | EClassCall Var LevelArgs (implementations : String -> Expr) Sort Var -- cannot be impls:Var->Expr (positivity)
+  | EClassCall Var LevelArgs (implementations : Nat -> Expr) Sort Var -- cannot be impls:Var->Expr (positivity)
 
   -- Records
   | ENew (parent : Maybe Expr) Expr
@@ -81,8 +81,8 @@
   | cLetClause (name : LetPattern) (body : Expr) (type : Maybe Expr) (isSFunc : Bool)
 
 \data LetPattern : \Set0
-  | LPName String
+  | LPName (name : String) (id : Nat)
   | LPTuple (List LetPattern)
-  | LPRecord (List (\Sigma (field : String) (pat : LetPattern)))
+  | LPRecord (List (\Sigma (field : Nat) (pat : LetPattern)))
 
 \func ExprSubst : \Set0 => List (\Sigma Var Expr)

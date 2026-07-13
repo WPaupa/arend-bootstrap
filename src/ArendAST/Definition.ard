@@ -12,17 +12,17 @@
   | DCons ConsDef
 
 \record FuncDef
-  (name : String) (params : ParamList) (resultType : Expr) (truncLevel : Maybe Expr) (body : Maybe Match) (isSFunc : Bool)
+  (name : String) (id : Nat) (params : ParamList) (resultType : Expr) (truncLevel : Maybe Expr) (body : Maybe Match) (isSFunc : Bool)
 
 \record DataDef
-  (name : String) (params : ParamList) (sort : Sort) (constrs : List ConsDef) (trunc : Maybe Int) (isSFunc : Bool)
+  (name : String) (id : Nat) (params : ParamList) (sort : Sort) (constrs : List ConsDef) (trunc : Maybe Int) (isSFunc : Bool)
 
 \record ClassDef
-  (name : String) (supers : List String) (fields : List FieldDef) (impls : String -> Expr)
-  (overrides : String -> Expr) (coercing : Maybe String) (sort : Sort) (isRecord : Bool)
+  (name : String) (id : Nat) (supers : List Nat) (fields : List FieldDef) (impls : Nat -> Expr)
+  (overrides : Nat -> Expr) (coercing : Maybe Nat) (sort : Sort) (isRecord : Bool)
 
 \record FieldDef
-  (name : String) (parent : String) (type : Expr) (isSFunc : Bool)
+  (name : String) (id : Nat) (parent : Nat) (type : Expr) (isSFunc : Bool)
 
 \record ConsDef
-  (name : String) (datatype : String) (params : ParamList) (patterns : Maybe (List Pattern)) (intervalmatch : Maybe Match)
+  (name : String) (id : Nat) (datatype : Nat) (params : ParamList) (patterns : Maybe (List Pattern)) (intervalmatch : Maybe Match)
