@@ -1,4 +1,4 @@
-\import Data.List
+\import Data.Array
 
 \class Monad (M : \Set -> \Set)
   | return {A : \Set} : A -> M A
@@ -10,10 +10,10 @@
 \func fmapM {M : Monad} {A B : \Set} (f : A -> B) (x : M A) : M B
   => x >>= \lam a => return (f a)
 
-\func forEachM {M : Monad} {A : \Set} (f : A -> M (\Sigma)) (xs : List A) : M (\Sigma) \elim xs
+\func forEachM {M : Monad} {A : \Set} (f : A -> M (\Sigma)) (xs : Array A) : M (\Sigma) \elim xs
   | nil     => return ()
   | x :: xs => f x >> forEachM f xs
 
-\func traverseM {M : Monad} {A B : \Set} (f : A -> M B) (xs : List A) : M (List B) \elim xs
+\func traverseM {M : Monad} {A B : \Set} (f : A -> M B) (xs : Array A) : M (Array B) \elim xs
   | nil     => return nil
   | x :: xs => f x >>= \lam y => traverseM f xs >>= \lam ys => return (y :: ys)
