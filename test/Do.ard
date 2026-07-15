@@ -1,0 +1,27 @@
+\import Utilities.Monad
+\import Monad.Do
+
+-- bind then result
+\func test1 {M : Monad} {A B : \Set} (ma : M A) (mb : A -> M B) : M B => do {
+  \lam a => ma,
+  mb a
+}
+
+-- sequencing (discarding results)
+\func test2 {M : Monad} {A : \Set} (ma mb : M A) : M A => do {
+  ma,
+  mb
+}
+
+-- single statement
+\func test3 {M : Monad} {A : \Set} (a : A) : M A => do {
+  return a
+}
+
+-- mixed binds and sequencing
+\func test4 {M : Monad} {A B : \Set} (ma : M A) (mb : M B) (k : A -> B -> M A) : M A => do {
+  \lam a => ma,
+  mb,
+  \lam b => mb,
+  (\lam x => k x b) a
+}

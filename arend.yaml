@@ -1,4 +1,7 @@
 langVersion: 1.11
 sourcesDir: src
 binariesDir: bin
+extensionsDir: ext
+extensionMainClass: monad.MonadExtension
 dependencies: [ arend-lib ]
+testsDir: test

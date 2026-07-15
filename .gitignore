@@ -3,3 +3,7 @@ bin
 *.iml
 Arend.jar
 .sig
+.gradle
+gradle
+build
+ext
