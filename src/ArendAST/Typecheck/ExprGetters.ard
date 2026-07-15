@@ -8,10 +8,10 @@
   | LocalVar _ _ t _  => t
 
 \func letClauseVar (_ : LetClause) : Result Var
-  | cLetClause name body (just type) true => letPatternVar type name (just body)
-  | cLetClause name body (just type) false => letPatternVar type name nothing
+  | cLetClause name body (justE type) true => letPatternVar type name (justE body)
+  | cLetClause name body (justE type) false => letPatternVar type name nothingE
   | _ => err ErrUnknownType \where {
-  \func letPatternVar (rtype : Expr) (pat : LetPattern) (body : Maybe Expr) : Result Var \elim pat
+  \func letPatternVar (rtype : Expr) (pat : LetPattern) (body : MaybeExpr) : Result Var \elim pat
     | LPName name id => ok (GlobalVar name id rtype body)
     | LPTuple l => err ErrUnknownType
     | LPRecord l => err ErrUnknownType -- TODO
