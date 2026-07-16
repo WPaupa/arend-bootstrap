@@ -25,3 +25,17 @@
   \lam b => mb,
   (\lam x => k x b) a
 }
+
+-- pure (non-monadic) let-binding interleaved with binds
+\func test5 {M : Monad} : M Nat => do {
+  \lam a => return 1,
+  \let b => 1,
+  return (a Nat.+ b)
+}
+
+-- let-binding with several clauses, used by a later bind
+\func test6 {M : Monad} {A : \Set} (f : Nat -> M A) : M A => do {
+  \let | x => 2 | y => 3,
+  \lam a => f (x Nat.* y),
+  return a
+}

@@ -4,6 +4,7 @@ import org.arend.ext.concrete.ConcreteFactory;
 import org.arend.ext.concrete.expr.ConcreteExpression;
 import org.arend.ext.concrete.expr.ConcreteIncompleteExpression;
 import org.arend.ext.concrete.expr.ConcreteLamExpression;
+import org.arend.ext.concrete.expr.ConcreteLetExpression;
 import org.arend.ext.concrete.expr.ConcreteTupleExpression;
 import org.arend.ext.error.ErrorReporter;
 import org.arend.ext.error.NameResolverError;
@@ -32,6 +33,9 @@ import java.util.List;
  *   <li>a <b>bind</b>, written as a lambda {@code \lam x => a}, which binds the result of the
  *       monadic action {@code a} to {@code x} in the rest of the block, i.e. it is desugared to
  *       {@code a >>= \lam x => rest}; or</li>
+ *   <li>a <b>pure let-binding</b>, written as {@code \let b => e} (with no {@code \in} body), which
+ *       binds {@code b} to the non-monadic value {@code e} in the rest of the block, i.e. it is
+ *       desugared to {@code \let b => e \in rest}; or</li>
  *   <li>a plain monadic action {@code a}, whose result is discarded, i.e. it is desugared to
  *       {@code a >> rest}.</li>
  * </ul>
@@ -40,12 +44,13 @@ import java.util.List;
  * <pre>
  * do {
  *   \lam a => ma,
+ *   \let b => f a,
  *   mb,
- *   \lam c => mc a,
+ *   \lam c => mc b,
  *   return (a, c)
  * }
  * </pre>
- * is equivalent to {@code ma >>= \lam a => mb >> (mc a >>= \lam c => return (a, c))}.
+ * is equivalent to {@code ma >>= \lam a => \let b => f a \in mb >> (mc b >>= \lam c => return (a, c))}.
  *
  * <p>The operators {@code >>=} and {@code >>} are referenced by name and resolved at the call
  * site, so this meta works for any monad that provides them (e.g. any instance of
@@ -79,7 +84,11 @@ public class DoMeta extends BaseMetaDefinition implements MetaResolver {
     for (int i = stmts.size() - 2; i >= 0; i--) {
       ConcreteExpression stmt = stmts.get(i);
       ConcreteFactory stmtFactory = factory.withData(stmt.getData());
-      if (stmt instanceof ConcreteLamExpression lam && !(lam.getBody() instanceof ConcreteIncompleteExpression)) {
+      if (stmt instanceof ConcreteLetExpression let && let.getExpression() instanceof ConcreteIncompleteExpression) {
+        // `\let b => e` (with no `\in` body) introduces a pure, non-monadic binding that is in
+        // scope for the rest of the block: `\let b => e \in rest`.
+        result = stmtFactory.letExpr(let.isHave(), let.isStrict(), let.getClauses(), result);
+      } else if (stmt instanceof ConcreteLamExpression lam && !(lam.getBody() instanceof ConcreteIncompleteExpression)) {
         // `\lam x => a` binds the result of `a` to `x` in the rest of the block: `a >>= \lam x => rest`.
         ArendRef bind = stmtFactory.unresolved(new LongName(">>="));
         ConcreteExpression continuation = stmtFactory.lam(lam.getParameters(), result);

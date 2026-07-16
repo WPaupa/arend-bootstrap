@@ -38,11 +38,12 @@ public class MonadExtension implements ArendExtension {
         `do { s_1, ... s_n }` is do-notation for monads (see `Utilities.Monad`).
 
         The last statement is the result of the block. Each preceding statement is either
-        * a bind `\\lam x => a`, which binds the result of the monadic action `a` to `x` in the rest of the block (desugars to `a >>= \\lam x => rest`), or
+        * a bind `\\lam x => a`, which binds the result of the monadic action `a` to `x` in the rest of the block (desugars to `a >>= \\lam x => rest`),
+        * a pure let-binding `\\let b => e` (with no `\\in` body), which binds `b` to the non-monadic value `e` in the rest of the block (desugars to `\\let b => e \\in rest`), or
         * a plain action `a`, whose result is discarded (desugars to `a >> rest`).
 
-        For example, `do { \\lam a => ma, mb, \\lam c => mc a, return (a, c) }` is equivalent to
-        `ma >>= \\lam a => mb >> (mc a >>= \\lam c => return (a, c))`.
+        For example, `do { \\lam a => ma, \\let b => f a, \\lam c => mc b, return (a, c) }` is equivalent to
+        `ma >>= \\lam a => \\let b => f a \\in (mc b >>= \\lam c => return (a, c))`.
         """), factory.metaDef(ref, Collections.emptyList(), null));
   }
 }
