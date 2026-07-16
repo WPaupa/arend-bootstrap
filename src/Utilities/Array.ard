@@ -1,0 +1,11 @@
+\import Algebra.Meta
+\import Arith.Nat
+\import Data.Array
+\import Logic
+\import Order.PartialOrder
+\import Order.StrictOrder
+
+\func nth {A : \Type} (n : Nat) (l : Array A) (p : n < l.len) : A \elim n, l
+  | _, nil => absurd linarith
+  | 0, a :: l => a
+  | suc n, a :: l => nth n l (NatOrder.unsuc< p)

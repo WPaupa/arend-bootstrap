@@ -1,11 +1,48 @@
+\import Analysis.Measure.SimpleFunctions
 \import ArendAST.Expression
+\import ArendAST.Level
+\import ArendAST.Typecheck.Env
 \import ArendAST.Typecheck.Error
+\import Arith.Nat
+\import Data.Array
 \import Data.Bool
 \import Data.Maybe
+\import Function.Meta
+\import Monad.Do
+\import Set
+\import Utilities.Monad
+\import Utilities.Monad.Reader
+
+\open NatSemiring
 
 \func varType (_ : Var) : Expr
   | GlobalVar _ _ t _ => t
   | LocalVar _ _ t _  => t
+
+\func varEqual (_ _ : Var) : Bool
+  | GlobalVar VName VId VType VEvaluation, GlobalVar VName1 VId1 VType1 VEvaluation1 => VId == VId1
+  | LocalVar VName index VType VEvaluation, LocalVar VName1 index1 VType1 VEvaluation1 => index == index1
+  | _, _ => false
+
+\func unify (t1 t2 : Expr) : Env (\Sigma) => {?}
+
+\func checkIsUniv (_ : Expr) : Env (\Sigma)
+  | EUniv _ => return ()
+  | EVar (GlobalVar _ _ _ (justE (EUniv _))) => return ()
+  | EVar (LocalVar  _ _ _ (justE (EUniv _))) => return ()
+  | t => liftReader (err (ErrNotUniv t))
+
+\func getSigmaType (_ : Expr) : Maybe (Array Var)
+  | ESigmaType vs s => just vs
+  | EVar (GlobalVar _ _ _ (justE (ESigmaType vs s))) => just vs
+  | EVar (LocalVar  _ _ _ (justE (ESigmaType vs s))) => just vs
+  | t => nothing
+
+\func getPiType (_ : Expr) : Maybe (\Sigma (Array Var) Expr Sort)
+  | EPiType vs v s => just (vs, v, s)
+  | EVar (GlobalVar _ _ _ (justE (EPiType vs v s))) => just (vs, v, s)
+  | EVar (LocalVar  _ _ _ (justE (EPiType vs v s))) => just (vs, v, s)
+  | t => nothing
 
 \func letClauseVar (_ : LetClause) : Result Var
   | cLetClause name body (justE type) true => letPatternVar type name (justE body)
@@ -15,4 +52,22 @@
     | LPName name id => ok (GlobalVar name id rtype body)
     | LPTuple l => err ErrUnknownType
     | LPRecord l => err ErrUnknownType -- TODO
+}
+
+\func addEvaluations (_ : Array Var) (_ : Array Expr) : Array Var
+  | nil, _ => nil
+  | v, nil => v
+  | (GlobalVar n i t _ :: vs), (e :: es) => GlobalVar n i t (justE e) :: addEvaluations vs es
+  | (LocalVar n i t _ :: vs), (e :: es) => LocalVar n i t (justE e) :: addEvaluations vs es
+
+\func scopeCheck (v : Var) : Env (\Sigma) => do {
+  \lam (env : CheckEnv) => askT,
+  \case findVar v env.vars \with {
+    | false => liftReader (err (ErrUnbound v))
+    | true => return ()
+  }
+} \where {
+  \func findVar (v : Var) (vs : Array Var) : Bool \elim vs
+    | nil => false
+    | h :: t => varEqual h v or findVar v t
 }

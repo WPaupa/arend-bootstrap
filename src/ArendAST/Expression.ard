@@ -3,11 +3,19 @@
 
 \data MaybeExpr : \Set0
   | justE Expr
-  | nothingE
+  | nothingE \where {
+  \func map (f : Expr -> Expr) (x : MaybeExpr) : MaybeExpr \elim x
+    | justE e => justE (f e)
+    | nothingE => nothingE
+}
 
 \data MaybeMatch : \Set0
   | justM Match
-  | nothingM
+  | nothingM \where {
+  \func map (f : Match -> Match) (x : MaybeMatch) : MaybeMatch \elim x
+    | justM m => justM (f m)
+    | nothingM => nothingM
+}
 
 \data Var : \Set0
   | GlobalVar (VName : String) (VId : Nat)   (VType : Expr) (VEvaluation : MaybeExpr)
@@ -57,6 +65,8 @@
   | EUniv Sort
   | EPiType (Array Var) Expr Sort
   | ESigmaType (Array Var) Sort
+  | ETInt
+  | ETString
   -- \type synonym
   | EType (type : Var) LevelArgs (clauseNo : Int) (args : Array Expr) (underlying : Expr)
   | ETypeDestr (type : Var) Expr

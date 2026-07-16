@@ -1,0 +1,128 @@
+\import Algebra.Meta
+\import ArendAST.Expression
+\import ArendAST.Typecheck.Env
+\import ArendAST.Typecheck.Error
+\import ArendAST.Typecheck.ExprGetters
+\import Arith.Nat
+\import Data.Bool
+\import Function.Meta
+\import Monad.Do
+\import Order.LinearOrder
+\import Paths.Meta
+\import Set
+\import Utilities.Array
+\import Utilities.Monad
+\import Data.Array
+\import Data.Maybe
+\import Data.Fin
+\import Utilities.Monad.Reader
+\import ArendAST.Reduction.Normalize
+\open Nat
+
+\func typecheck (e : Expr) : Env Expr \elim e
+  | EVar v => do {
+    scopeCheck v,
+    typecheckVar v
+  }
+  | EInt i => return ETInt
+  | EString s => return ETString
+  | EApp e1 e2 isExplicit => do {
+    \lam te1 => typecheck e1,
+    \lam te2 => typecheck e2,
+    \case getPiType te1 \with {
+      | nothing => liftReader (err (ErrNotPi te1))
+      | just (nil, _, _) => liftReader (err (ErrNotPi te1))
+      | just (v :: nil, e, _) => do {
+        unify te2 e,
+        return (normalize (substitute e v e2))
+      }
+      | just (v :: vs, e, s) => do {
+        unify te2 e,
+        return (EPiType (normVArray (substVArray vs v e2)) (normalize (substitute e v e2)) s)
+      }
+    }
+  }
+  | ELam a e resultSort => do {
+    -- this is probably slower than doing it with lists
+    forEachIndex a.len (\lam i => localT (extendArray (take i a (linarith (fin_< i)))) (typecheckVar (a i))),
+    localT (extendArray a) (typecheck e)
+  }
+  | ETuple elements e => \case getSigmaType e \with {
+    | nothing => liftReader (err (ErrNotSigma e))
+    | just a => \case NatSemiring.decideEq a.len elements.len \with {
+      | no _ => liftReader (err (ErrArity a.len elements.len))
+      | yes eq => do {
+        -- for each element,
+        forEachIndex a.len (\lam i => localT
+          -- add the types of elements before it into the context
+          (extendArray
+            -- with inserted elements as evaluations
+            (addEvaluations (take i a (linarith (fin_< i))) (take i elements (linarith (fin_< i))))
+          )
+          -- and typecheck the next one
+          (typecheck (elements (rewriteI eq i)))),
+        return e
+      }
+    }
+  }
+  | EProj e n isProperty => do {
+    \lam te => typecheck e,
+    \case getSigmaType te \with {
+      | nothing => liftReader (err (ErrNotSigma te))
+      | just a => \case NatSemiring.trichotomy a.len n \with {
+        | greater gr => return (varType (nth n a gr))
+        -- TODO this feels wrong, what if the varType has some variables bound earlier in the sigma-type
+        | _ => liftReader (err (ErrArity a.len n))
+      }
+    }
+  }
+  | EFunCall v l a => {?}
+  | EConsCall v l typeArgs consArgs => {?}
+  | EDataCall v l a => {?}
+  | EFieldCall v e => {?}
+  | EClassCall v l implementations s v1 => {?}
+  | ENew parent e => {?}
+  | EArray l e elems tail => {?}
+  | EPath l e1 e2 => {?}
+  | EPathAt e1 e2 => {?}
+  | ECase isSFunc a e returnLevel m args => {?}
+  | ELet isSFunc a e => {?}
+  | ETyped e e1 => {?}
+  | EBox e e1 => {?}
+  | EPEval e => {?}
+  | EUniv s => {?}
+  | EPiType a e s => {?}
+  | ESigmaType a s => {?}
+  | EType type l clauseNo args e => {?}
+  | ETypeDestr type e => {?}
+  | EError m => {?}
+  | EGoal => {?}
+  | ETInt => {?}
+  | ETString => {?}
+
+
+\func typecheckVar (_ : Var) : Env Expr
+  | GlobalVar VName VId VType (justE VEvaluation) => do {
+    \lam ttype => typecheck VType,
+    \lam teval => typecheck VEvaluation,
+    unify VType teval,
+    checkIsUniv ttype,
+    return VType
+  }
+  | LocalVar VName index VType (justE VEvaluation) => do {
+    \lam ttype => typecheck VType,
+    \lam teval => typecheck VEvaluation,
+    unify VType teval,
+    checkIsUniv ttype,
+    return VType
+  }
+  | GlobalVar VName VId VType nothingE => do {
+    \lam ttype => typecheck VType,
+    checkIsUniv ttype,
+    return VType
+    }
+  | LocalVar VName index VType nothingE => do {
+    \lam ttype => typecheck VType,
+    checkIsUniv ttype,
+    return VType
+  }

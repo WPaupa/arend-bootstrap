@@ -1,0 +1,20 @@
+\import ArendAST.Expression
+\import Data.Array
+
+\func substitute (e : Expr) (v : Var) (e' : Expr) : Expr => {?}
+
+\func normalize (e : Expr) : Expr => {?}
+
+\func substVArray (vs : Array Var) (v : Var) (e : Expr) : Array Var =>
+  map (\case __ \with {
+    | GlobalVar VName VId VType VEvaluation => GlobalVar VName VId (substitute VType v e)
+        (MaybeExpr.map (\lam x => substitute x v e) VEvaluation)
+    | LocalVar VName index VType VEvaluation => LocalVar VName index (substitute VType v e)
+        (MaybeExpr.map (\lam x => substitute x v e) VEvaluation)
+  }) vs
+
+\func normVArray (vs : Array Var) : Array Var =>
+  map (\case __ \with {
+    | GlobalVar VName VId VType VEvaluation => GlobalVar VName VId (normalize VType) (MaybeExpr.map normalize VEvaluation)
+    | LocalVar VName index VType VEvaluation => LocalVar VName index (normalize VType) (MaybeExpr.map normalize VEvaluation)
+  }) vs

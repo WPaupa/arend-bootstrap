@@ -5,8 +5,7 @@
 \import Utilities.Monad.Reader
 
 \data CheckError
-  | ErrUnboundLocal Nat
-  | ErrUnknownGlobal Var
+  | ErrUnbound Var
   | ErrNotPi Expr
   | ErrNotSigma Expr
   | ErrNotUniv Expr
@@ -27,5 +26,5 @@
   | return a => ok a
   | >>= r f  => \case r \with { | ok a => f a | err e => err e }
 
-\func Env (A : \Set) : \Set => ReaderT CheckEnv Result A
-\func throw {A : \Set} (e : CheckError) : Env A => liftReader (err e)
+\func Env (A : \Set0) : \Set0 => ReaderT CheckEnv Result A
+\func throw {A : \Set0} (e : CheckError) : Env A => liftReader (err e)
