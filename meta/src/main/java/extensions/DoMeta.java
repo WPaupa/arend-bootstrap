@@ -1,4 +1,4 @@
-package monad;
+package extensions;
 
 import org.arend.ext.concrete.ConcreteFactory;
 import org.arend.ext.concrete.expr.ConcreteExpression;

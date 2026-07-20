@@ -1,0 +1,92 @@
+\import ArendAST.Expression
+\import ArendAST.Quote
+
+\import Debug.Meta
+
+-- global variable: name$id -> GlobalVar name id
+\func global : Expr => quot { foo$3 }
+\func global_p => println global
+
+-- lambda identity: binder and use share de Bruijn level 0
+\func lamId : Expr => quot { \lam x => x }
+\func lamId_p => println lamId
+
+-- nested binders get increasing levels (x -> 0, y -> 1)
+\func nested : Expr => quot { \lam x => \lam y => x }
+\func nested_p => println nested
+
+-- shadowing: the inner binder wins and has a distinct level
+\func shadow : Expr => quot { \lam x => \lam x => x }
+\func shadow_p => println shadow
+
+-- dependent Pi telescope: y's type may reference the earlier binder x
+\func piType : Expr => quot { \Pi (x : A$1) (y : B$2 x) -> x }
+\func piType_p => println piType
+
+-- Sigma with an unnamed component
+\func sigma : Expr => quot { \Sigma (x : A$1) (B$2 x) }
+\func sigma_p => println sigma
+
+-- application: implicit argument -> false, explicit -> true
+\func app : Expr => quot { f$0 {a$1} b$2 }
+\func app_p => println app
+
+-- tuples (type field is always EGoal); the empty tuple too
+\func tuple : Expr => quot { a$0, b$1 }
+\func tuple_p => println tuple
+
+\func unit  : Expr => quot { () }
+\func unit_p => println unit
+
+-- literals
+\func intLit : Expr => quot { 42 }
+\func intLit_p => println intLit
+
+\func strLit : Expr => quot { "hi" }
+\func strLit_p => println strLit
+
+-- universe -> EUniv with the default sort
+\func univ : Expr => quot { \Type }
+\func univ_p => println univ
+
+-- type ascription -> ETyped
+\func typed : Expr => quot { a$0 : T$1 }
+\func typed_p => println typed
+
+-- projection -> EProj
+\func proj : Expr => quot { \lam p => p.1 }
+\func proj_p => println proj
+
+-- \let -> ELet. Clause-bound names get de Bruijn levels; scoping is (mutually) recursive.
+\func letSimple : Expr => quot { \let x => a$0 \in x }
+\func letSimple_p => println letSimple
+
+\func letSeq : Expr => quot { \let | x => a$0 | y => x \in y }
+\func letSeq_p => println letSeq
+
+-- a \let clause with parameters folds them into a lambda body
+\func letParam : Expr => quot { \let g a => a \in g b$0 }
+\func letParam_p => println letParam
+
+-- \case -> ECase, with a variable pattern
+\func caseVar : Expr => quot { \case a$0 \with { | y => y } }
+\func caseVar_p => println caseVar
+
+-- \case with a \return type and a constructor pattern (pattern variables bind locals)
+\func caseCon : Expr => quot { \case a$0 \return T$1 \with { | c$2 x => x } }
+\func caseCon_p => println caseCon
+
+-- multiple scrutinees and nested constructor patterns; body references all pattern vars by level
+\func caseMulti : Expr => quot { \case a$0, b$1 \with { | con$5 x y, z => f$9 x y z } }
+\func caseMulti_p => println caseMulti
+
+-- \peval -> EPEval, \box -> EBox (value type is EGoal)
+\func peval : Expr => quot { \peval a$0 }
+\func peval_p => println peval
+
+\func box : Expr => quot { \box a$0 }
+\func box_p => println box
+
+-- \case remains available even when the pattern is unsupported: an absurd clause -> PAbsurd
+\func caseAbsurd : Expr => quot { \case a$0 \with { | () } }
+\func caseAbsurd_p => println caseAbsurd
