@@ -82,6 +82,10 @@ public class QuotMeta implements MetaResolver {
   // single tuple, because a one-element tuple `(x)` collapses to `x` in Arend concrete syntax.
   static final int NIL = 100;
   static final int CONS = 101;
+  //   Level: LInfinity = a bare number; LMax = (LVL_MAX, varTag, offset, constant) with
+  //   varTag 0 = nothing, 1 = LP, 2 = LH. A Sort is encoded as (lpLevel, lhLevel).
+  static final int LVL_INF = 200;
+  static final int LVL_MAX = 201;
   // Variant tags for encoded sub-structures. Each is decoded by a dedicated decoder, so the small
   // tag spaces below may overlap with one another and with the node tags above.
   //   MaybeExpr: nothing = a bare number; just = (JUST, enc).
@@ -120,32 +124,36 @@ public class QuotMeta implements MetaResolver {
   }
 
   // Immutable local context of binders, keyed by name (innermost first). The stored level is the
-  // de Bruijn level (number of binders already in scope when this binder was introduced).
+  // de Bruijn level (number of binders already in scope when this binder was introduced); `type` is
+  // the binder's declared type encoding (or null if none), so every occurrence of a variable can be
+  // given the same type.
   static final class Ctx {
-    static final Ctx EMPTY = new Ctx(null, -1, null, 0);
+    static final Ctx EMPTY = new Ctx(null, -1, null, null, 0);
     final String name;
     final int level;
+    final ConcreteExpression type;
     final Ctx prev;
     final int size;
 
-    private Ctx(String name, int level, Ctx prev, int size) {
+    private Ctx(String name, int level, ConcreteExpression type, Ctx prev, int size) {
       this.name = name;
       this.level = level;
+      this.type = type;
       this.prev = prev;
       this.size = size;
     }
 
-    Ctx push(String name) {
-      return new Ctx(name, size, this, size + 1);
+    Ctx push(String name, ConcreteExpression type) {
+      return new Ctx(name, size, type, this, size + 1);
     }
 
-    int lookup(String name) {
+    Ctx find(String name) {
       for (Ctx c = this; c != EMPTY; c = c.prev) {
         if (name.equals(c.name)) {
-          return c.level;
+          return c;
         }
       }
-      return -1;
+      return null;
     }
   }
 
@@ -187,13 +195,80 @@ public class QuotMeta implements MetaResolver {
       return acc;
     }
 
-    // A reference variable: (isGlobal, name, id-or-level). Used inside EVar and in patterns.
-    private ConcreteExpression encVar(boolean global, String name, ConcreteExpression key) {
-      return factory.tuple(List.of(tag(global ? 1 : 0), factory.string(name), key));
+    // A reference variable: (isGlobal, name, id-or-level, typeEnc). Used inside EVar and in patterns.
+    private ConcreteExpression encVar(boolean global, String name, ConcreteExpression key, ConcreteExpression type) {
+      return factory.tuple(List.of(tag(global ? 1 : 0), factory.string(name), key, type));
     }
 
-    // Returns null (after reporting an error) on a hard failure (an unbound local).
+    // === sorts / levels ===
+    // Analyze a level expression into {infFlag, varTag, offset, constant}, or null if too complex.
+    private int @Nullable [] analyzeLevel(Concrete.LevelExpression le) {
+      if (le instanceof Concrete.PLevelExpression) {
+        return new int[] { 0, 1, 0, 0 };
+      }
+      if (le instanceof Concrete.HLevelExpression) {
+        return new int[] { 0, 2, 0, 0 };
+      }
+      if (le instanceof Concrete.InfLevelExpression) {
+        return new int[] { 1, 0, 0, 0 };
+      }
+      if (le instanceof Concrete.NumberLevelExpression n) {
+        return new int[] { 0, 0, 0, n.getNumber() };
+      }
+      if (le instanceof Concrete.SucLevelExpression suc) {
+        int[] a = analyzeLevel(suc.getExpression());
+        if (a == null) {
+          return null;
+        }
+        return a[0] == 1 ? a : new int[] { 0, a[1], a[2] + 1, a[3] + 1 };
+      }
+      // \max and named/inference level variables are not represented.
+      return null;
+    }
+
+    private ConcreteExpression encLevelOf(int[] a) {
+      return a[0] == 1 ? tag(LVL_INF) : factory.tuple(List.of(tag(LVL_MAX), tag(a[1]), factory.number(a[2]), factory.number(a[3])));
+    }
+
+    // A level in the p (predicative) or h (homotopy) position; the default is 0 for p and inf for h.
+    private ConcreteExpression encLevel(@Nullable Concrete.LevelExpression le, boolean isH) {
+      int[] a = le == null ? null : analyzeLevel(le);
+      if (a == null) {
+        a = isH ? new int[] { 1, 0, 0, 0 } : new int[] { 0, 0, 0, 0 };
+      }
+      return encLevelOf(a);
+    }
+
+    private ConcreteExpression defaultSortEnc() {
+      return factory.tuple(List.of(encLevel(null, false), encLevel(null, true)));
+    }
+
+    private ConcreteExpression sortFromUniverse(Concrete.UniverseExpression u) {
+      return factory.tuple(List.of(encLevel(u.getPLevel(), false), encLevel(u.getHLevel(), true)));
+    }
+
+    // The sort of a type-former: taken from an ascribed universe if there is one, else the default.
+    private ConcreteExpression sortFromAscribed(@Nullable ConcreteExpression ascribed) {
+      return ascribed instanceof Concrete.UniverseExpression u ? sortFromUniverse(u) : defaultSortEnc();
+    }
+
+    // Wrap `core` in ETyped when a type is ascribed but the node does not absorb it itself.
+    private @Nullable ConcreteExpression ascribe(ConcreteExpression core, Ctx ctx, @Nullable ConcreteExpression ascribed) {
+      if (ascribed == null) {
+        return core;
+      }
+      ConcreteExpression t = enc(ascribed, ctx);
+      return t == null ? null : factory.tuple(List.of(tag(ETYPED), core, t));
+    }
+
     private @Nullable ConcreteExpression enc(ConcreteExpression e, Ctx ctx) {
+      return enc(e, ctx, null);
+    }
+
+    // Returns null (after reporting an error) on a hard failure (an unbound local). `ascribed` is the
+    // type from an enclosing `(e : ascribed)`; nodes with a type/sort slot absorb it, others wrap in
+    // ETyped (see `ascribe`).
+    private @Nullable ConcreteExpression enc(ConcreteExpression e, Ctx ctx, @Nullable ConcreteExpression ascribed) {
       // Application `f a_1 ... a_n` (at resolve time this is an unresolved sequence, not a
       // ConcreteAppExpression, so use the uniform argument-sequence accessor).
       List<? extends ConcreteArgument> seq = e.getArgumentsSequence();
@@ -209,61 +284,89 @@ public class QuotMeta implements MetaResolver {
           }
           acc = factory.tuple(List.of(tag(EAPP), acc, ta, tag(seq.get(i).isExplicit() ? 1 : 0)));
         }
-        return acc;
+        return ascribe(acc, ctx, ascribed);
       }
 
       if (e instanceof ConcreteReferenceExpression r) {
+        // A variable absorbs the ascribed type (as its VType); otherwise it takes the type recorded
+        // for it at its binder, so every occurrence carries the same type.
+        ConcreteExpression ascType = null;
+        if (ascribed != null) {
+          ascType = enc(ascribed, ctx);
+          if (ascType == null) {
+            return null;
+          }
+        }
         String name = r.getReferent().getRefName();
         int d = name.lastIndexOf('$');
         if (d >= 0 && isNat(name.substring(d + 1))) {
+          ConcreteExpression t = ascType != null ? ascType : tag(EGOAL);
           return factory.tuple(List.of(tag(EVAR),
-              encVar(true, name.substring(0, d), factory.number(new java.math.BigInteger(name.substring(d + 1))))));
+              encVar(true, name.substring(0, d), factory.number(new java.math.BigInteger(name.substring(d + 1))), t)));
         }
-        int level = ctx.lookup(name);
-        if (level < 0) {
+        Ctx entry = ctx.find(name);
+        if (entry == null) {
           resolver.getErrorReporter().report(new NameResolverError("Unbound variable: " + name, r));
           return null;
         }
-        return factory.tuple(List.of(tag(EVAR), encVar(false, name, factory.number(level))));
+        ConcreteExpression t = ascType != null ? ascType : (entry.type != null ? entry.type : tag(EGOAL));
+        return factory.tuple(List.of(tag(EVAR), encVar(false, name, factory.number(entry.level), t)));
       }
 
       if (e instanceof ConcreteNumberExpression n) {
-        return factory.tuple(List.of(tag(EINT), factory.number(n.getNumber())));
+        return ascribe(factory.tuple(List.of(tag(EINT), factory.number(n.getNumber()))), ctx, ascribed);
       }
 
       if (e instanceof ConcreteStringExpression s) {
-        return factory.tuple(List.of(tag(ESTRING), factory.string(s.getUnescapedString())));
+        return ascribe(factory.tuple(List.of(tag(ESTRING), factory.string(s.getUnescapedString()))), ctx, ascribed);
       }
 
+      // `(e : T)`: translate e with T as its ascribed type (which it absorbs, or wraps in ETyped).
       if (e instanceof ConcreteTypedExpression t) {
-        ConcreteExpression v = enc(t.getExpression(), ctx);
-        if (v == null) {
-          return null;
-        }
-        ConcreteExpression ty = enc(t.getType(), ctx);
-        if (ty == null) {
-          return null;
-        }
-        return factory.tuple(List.of(tag(ETYPED), v, ty));
+        ConcreteExpression inner = enc(t.getExpression(), ctx, t.getType());
+        return inner == null ? null : ascribe(inner, ctx, ascribed);
       }
 
+      // A tuple must carry its type; use the ascribed one instead of EGoal + an ETyped wrapper.
       if (e instanceof ConcreteTupleExpression tuple) {
         ConcreteExpression list = encList(tuple.getFields(), ctx);
-        return list == null ? null : factory.tuple(List.of(tag(ETUPLE), list));
+        if (list == null) {
+          return null;
+        }
+        ConcreteExpression type;
+        if (ascribed == null) {
+          type = tag(EGOAL);
+        } else {
+          type = enc(ascribed, ctx);
+          if (type == null) {
+            return null;
+          }
+        }
+        return factory.tuple(List.of(tag(ETUPLE), list, type));
       }
 
       if (e instanceof ConcreteLamExpression lam) {
-        return binder(lam.getParameters(), lam.getBody(), ctx, ELAM);
+        ConcreteExpression core = binder(lam.getParameters(), lam.getBody(), ctx, ELAM, null);
+        return core == null ? null : ascribe(core, ctx, ascribed);
       }
       if (e instanceof ConcretePiExpression pi) {
-        return binder(pi.getParameters(), pi.getCodomain(), ctx, EPI);
+        return binder(pi.getParameters(), pi.getCodomain(), ctx, EPI, ascribed);
       }
       if (e instanceof ConcreteSigmaExpression sigma) {
-        return binder(sigma.getParameters(), null, ctx, ESIGMA);
+        return binder(sigma.getParameters(), null, ctx, ESIGMA, ascribed);
       }
 
-      if (e instanceof ConcreteUniverseExpression) {
-        return tag(EUNIV);
+      // A universe's sort comes from its own levels, or an ascribed universe, else the default.
+      if (e instanceof Concrete.UniverseExpression u) {
+        ConcreteExpression sortEnc;
+        if (u.getPLevel() != null || u.getHLevel() != null) {
+          sortEnc = sortFromUniverse(u);
+        } else if (ascribed instanceof Concrete.UniverseExpression au) {
+          sortEnc = sortFromUniverse(au);
+        } else {
+          sortEnc = defaultSortEnc();
+        }
+        return factory.tuple(List.of(tag(EUNIV), sortEnc));
       }
 
       // Projection `e.n`. The ext API has no accessor for it, so we read the internal concrete node
@@ -271,30 +374,44 @@ public class QuotMeta implements MetaResolver {
       if (e instanceof Concrete.ProjExpression proj) {
         ConcreteExpression sub = enc(proj.getExpression(), ctx);
         // isProperty is not recoverable from surface syntax, so default to false (0).
-        return sub == null ? null : factory.tuple(List.of(tag(EPROJ), sub, factory.number(proj.getField()), tag(0)));
+        return sub == null ? null : ascribe(factory.tuple(List.of(tag(EPROJ), sub, factory.number(proj.getField()), tag(0))), ctx, ascribed);
       }
 
       // `\peval e` / `\eval e` -> EPEval (the AST has no non-`peval` variant).
       if (e instanceof Concrete.EvalExpression eval) {
         ConcreteExpression sub = enc(eval.getExpression(), ctx);
-        return sub == null ? null : factory.tuple(List.of(tag(EPEVAL), sub));
+        return sub == null ? null : ascribe(factory.tuple(List.of(tag(EPEVAL), sub)), ctx, ascribed);
       }
 
-      // `\box e` -> EBox e _ (the value type is not recoverable, so EGoal).
+      // `\box e` -> EBox e T (the value type is the ascribed one, or EGoal).
       if (e instanceof Concrete.BoxExpression box) {
         ConcreteExpression sub = enc(box.getExpression(), ctx);
-        return sub == null ? null : factory.tuple(List.of(tag(EBOX), sub, tag(EGOAL)));
+        if (sub == null) {
+          return null;
+        }
+        ConcreteExpression type;
+        if (ascribed == null) {
+          type = tag(EGOAL);
+        } else {
+          type = enc(ascribed, ctx);
+          if (type == null) {
+            return null;
+          }
+        }
+        return factory.tuple(List.of(tag(EBOX), sub, type));
       }
 
       if (e instanceof Concrete.LetExpression let) {
-        return encLet(let, ctx);
+        ConcreteExpression core = encLet(let, ctx);
+        return core == null ? null : ascribe(core, ctx, ascribed);
       }
       if (e instanceof Concrete.CaseExpression caseExpr) {
-        return encCase(caseExpr, ctx);
+        ConcreteExpression core = encCase(caseExpr, ctx);
+        return core == null ? null : ascribe(core, ctx, ascribed);
       }
 
       // Goals, holes, and everything else without a readable accessor.
-      return tag(EGOAL);
+      return ascribe(tag(EGOAL), ctx, ascribed);
     }
 
     // MaybeExpr: nothing (null) -> a bare marker; just -> (JUST, enc).
@@ -307,23 +424,39 @@ public class QuotMeta implements MetaResolver {
     }
 
     // ELet (isSFunc, Array LetClause, in). Arend `\let` is (mutually) recursive for scoping: every
-    // clause body and the `in` body see all clause-bound names, so we assign all levels first.
+    // clause body and the `in` body see all clause-bound names, so we assign all levels first, then
+    // record each single-name clause's declared type so its occurrences share it.
     private @Nullable ConcreteExpression encLet(Concrete.LetExpression let, Ctx ctx) {
       ConcreteExpression isSFunc = tag(let.isStrict() ? 1 : 0);
-      Ctx[] cur = { ctx };
-      List<ConcreteExpression> pats = new ArrayList<>();
-      for (Concrete.LetClause clause : let.getClauses()) {
-        pats.add(encLetPattern(clause.getPattern(), cur));
-      }
-      Ctx bodyCtx = cur[0];
-      List<ConcreteExpression> clauseEncs = new ArrayList<>();
       List<? extends Concrete.LetClause> clauses = let.getClauses();
+      // Pass A: assign levels (types not known yet); this context is enough to encode the types.
+      Ctx[] tmp = { ctx };
+      List<ConcreteExpression> pats = new ArrayList<>();
+      for (Concrete.LetClause clause : clauses) {
+        pats.add(encLetPattern(clause.getPattern(), tmp));
+      }
+      Ctx levelCtx = tmp[0];
+      // Pass B: rebuild the context (same names/levels), recording declared types.
+      Ctx[] typed = { ctx };
+      for (Concrete.LetClause clause : clauses) {
+        ConcreteExpression tEnc = null;
+        if (clause.getPattern() instanceof Concrete.NamePattern && clause.getResultType() != null) {
+          tEnc = enc(clause.getResultType(), levelCtx);
+          if (tEnc == null) {
+            return null;
+          }
+        }
+        pushLetBinders(clause.getPattern(), tEnc, typed);
+      }
+      Ctx bodyCtx = typed[0];
+      // Pass C: encode clause bodies/types and the `in` body under the typed context.
+      List<ConcreteExpression> clauseEncs = new ArrayList<>();
       for (int i = 0; i < clauses.size(); i++) {
         Concrete.LetClause clause = clauses.get(i);
         // Parameters of `\let f x => e` fold into a lambda body `\lam x => e`.
         ConcreteExpression body = clause.getParameters().isEmpty()
             ? enc(clause.getTerm(), bodyCtx)
-            : binder(clause.getParameters(), clause.getTerm(), bodyCtx, ELAM);
+            : binder(clause.getParameters(), clause.getTerm(), bodyCtx, ELAM, null);
         if (body == null) {
           return null;
         }
@@ -348,8 +481,21 @@ public class QuotMeta implements MetaResolver {
       }
       String name = pat instanceof Concrete.NamePattern np && np.getRef() != null ? np.getRef().getRefName() : "_";
       int level = cur[0].size;
-      cur[0] = cur[0].push(name);
+      cur[0] = cur[0].push(name, null);
       return factory.tuple(List.of(tag(LP_NAME), factory.string(name), factory.number(level)));
+    }
+
+    // Re-push a let pattern's binders (same order/levels as encLetPattern), giving a single
+    // NamePattern the supplied type so its uses carry it.
+    private void pushLetBinders(Concrete.Pattern pat, @Nullable ConcreteExpression type, Ctx[] cur) {
+      if (pat instanceof Concrete.TuplePattern tp) {
+        for (Concrete.Pattern sp : tp.getPatterns()) {
+          pushLetBinders(sp, null, cur);
+        }
+        return;
+      }
+      String name = pat instanceof Concrete.NamePattern np && np.getRef() != null ? np.getRef().getRefName() : "_";
+      cur[0] = cur[0].push(name, type);
     }
 
     // ECase (isSFunc, Array Var params, returnType, returnLevel, Match, Array Expr args).
@@ -379,7 +525,7 @@ public class QuotMeta implements MetaResolver {
           }
         }
         paramEncs.add(factory.tuple(List.of(factory.string(nm), factory.number(level), vt)));
-        cur = cur.push(nm);
+        cur = cur.push(nm, ca.type == null ? null : vt);
       }
       ConcreteExpression retType = caseExpr.getResultType() == null ? tag(EGOAL) : enc(caseExpr.getResultType(), cur);
       if (retType == null) {
@@ -421,12 +567,12 @@ public class QuotMeta implements MetaResolver {
         String name = np.getRef() != null ? np.getRef().getRefName() : "_";
         int d = name.lastIndexOf('$');
         if (d >= 0 && isNat(name.substring(d + 1))) {
-          ConcreteExpression v = encVar(true, name.substring(0, d), factory.number(new java.math.BigInteger(name.substring(d + 1))));
+          ConcreteExpression v = encVar(true, name.substring(0, d), factory.number(new java.math.BigInteger(name.substring(d + 1))), tag(EGOAL));
           return factory.tuple(List.of(tag(P_CONSTR), v, tag(NIL)));
         }
         int level = cur[0].size;
-        cur[0] = cur[0].push(name);
-        return factory.tuple(List.of(tag(P_VAR), encVar(false, name, factory.number(level))));
+        cur[0] = cur[0].push(name, null);
+        return factory.tuple(List.of(tag(P_VAR), encVar(false, name, factory.number(level), tag(EGOAL))));
       }
       if (pat instanceof Concrete.ConstructorPattern cp) {
         return encConstrPattern(cp.getConstructor(), cp.getPatterns(), cur);
@@ -459,7 +605,7 @@ public class QuotMeta implements MetaResolver {
       for (Concrete.Pattern sp : argPats) {
         subs.add(encPattern(sp, cur));
       }
-      return factory.tuple(List.of(tag(P_CONSTR), encVar(true, cn, factory.number(id)), listChain(subs)));
+      return factory.tuple(List.of(tag(P_CONSTR), encVar(true, cn, factory.number(id), tag(EGOAL)), listChain(subs)));
     }
 
     private @Nullable ConcreteExpression encList(List<? extends ConcreteExpression> es, Ctx ctx) {
@@ -474,7 +620,7 @@ public class QuotMeta implements MetaResolver {
       return acc;
     }
 
-    private @Nullable ConcreteExpression binder(List<? extends ConcreteParameter> params, @Nullable ConcreteExpression body, Ctx ctx, int kind) {
+    private @Nullable ConcreteExpression binder(List<? extends ConcreteParameter> params, @Nullable ConcreteExpression body, Ctx ctx, int kind, @Nullable ConcreteExpression ascribed) {
       Ctx cur = ctx;
       List<ConcreteExpression> tele = new ArrayList<>();
       for (ConcreteParameter p : params) {
@@ -492,15 +638,19 @@ public class QuotMeta implements MetaResolver {
             }
           }
           tele.add(factory.tuple(List.of(factory.string(nm), factory.number(level), typeEnc)));
-          cur = cur.push(nm);
+          // Record the declared type so every use of this variable is given the same type.
+          cur = cur.push(nm, typeC == null ? null : typeEnc);
         }
       }
       ConcreteExpression teleList = listChain(tele);
+      // A lambda's result sort is not recoverable from surface syntax; a \Pi/\Sigma sort may be given
+      // by an ascribed universe.
+      ConcreteExpression sortEnc = kind == ELAM ? defaultSortEnc() : sortFromAscribed(ascribed);
       if (kind == ESIGMA) {
-        return factory.tuple(List.of(tag(ESIGMA), teleList));
+        return factory.tuple(List.of(tag(ESIGMA), teleList, sortEnc));
       }
       ConcreteExpression b = enc(body, cur);
-      return b == null ? null : factory.tuple(List.of(tag(kind), teleList, b));
+      return b == null ? null : factory.tuple(List.of(tag(kind), teleList, b, sortEnc));
     }
   }
 }

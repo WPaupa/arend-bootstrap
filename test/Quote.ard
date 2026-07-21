@@ -90,3 +90,38 @@
 -- \case remains available even when the pattern is unsupported: an absurd clause -> PAbsurd
 \func caseAbsurd : Expr => quot { \case a$0 \with { | () } }
 \func caseAbsurd_p => println caseAbsurd
+-- a variable's declared type propagates to every occurrence
+\func varType : Expr => quot { \lam (x : A$1) => f$0 x x }
+\func varType_p => println varType
+
+-- ascription fills the type slot of a tuple / box (no ETyped wrapper) ...
+\func ascTuple : Expr => quot { (a$0, b$1) : S$2 }
+\func ascTuple_p => println ascTuple
+
+\func ascBox : Expr => quot { (\box a$0 : T$1) }
+\func ascBox_p => println ascBox
+
+-- ... sets a variable's type ...
+\func ascGlobal : Expr => quot { foo$3 : A$1 }
+\func ascGlobal_p => println ascGlobal
+
+-- ... and otherwise falls back to ETyped
+\func ascApp : Expr => quot { f$0 a$1 : T$2 }
+\func ascApp_p => println ascApp
+
+-- a universe's sort comes from its explicit levels
+\func sortNum : Expr => quot { \Type 0 1 }
+\func sortNum_p => println sortNum
+
+\func sortProp : Expr => quot { \Prop }
+\func sortProp_p => println sortProp
+
+\func sortSet : Expr => quot { \Set 3 }
+\func sortSet_p => println sortSet
+
+\func sortLpLh : Expr => quot { \Type \lp \lh }
+\func sortLpLh_p => println sortLpLh
+
+-- a \Pi/\Sigma sort can be given by an ascribed universe
+\func piSort : Expr => quot { \Pi (x : A$1) -> B$2 x : \Type 0 5 }
+\func piSort_p => println piSort

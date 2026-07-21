@@ -64,8 +64,11 @@ public class QuotBuild extends BaseMetaDefinition {
   @Dependency(name = "Sort.lh") ArendRef lh;
   @Dependency ArendRef LMax;
   @Dependency ArendRef LInfinity;
+  @Dependency ArendRef LP;
+  @Dependency ArendRef LH;
   // stdlib
   @Dependency ArendRef nothing;
+  @Dependency ArendRef just;
   @Dependency(name = "true") ArendRef trueRef;
   @Dependency(name = "false") ArendRef falseRef;
 
@@ -88,12 +91,26 @@ public class QuotBuild extends BaseMetaDefinition {
       return args.length == 0 ? head : factory.app(head, true, args);
     }
 
-    // \new Sort { | lp => LMax nothing 0 0 | lh => LInfinity }
-    private ConcreteExpression defaultSort() {
-      ConcreteExpression lmax = factory.app(factory.ref(LMax), true, factory.ref(nothing), factory.number(0), factory.number(0));
+    // A Sort is encoded as (lpLevel, lhLevel); build `\new Sort { | lp => .. | lh => .. }`.
+    private ConcreteExpression decSort(ConcreteExpression e) {
+      List<? extends ConcreteExpression> fs = ((ConcreteTupleExpression) e).getFields();
       return factory.newExpr(factory.classExt(factory.ref(Sort),
-          factory.implementation(lp, lmax),
-          factory.implementation(lh, factory.ref(LInfinity))));
+          factory.implementation(lp, decLevel(fs.get(0))),
+          factory.implementation(lh, decLevel(fs.get(1)))));
+    }
+
+    // A level: a bare number -> LInfinity; (LVL_MAX, varTag, offset, constant) -> LMax var offset constant.
+    private ConcreteExpression decLevel(ConcreteExpression e) {
+      if (!(e instanceof ConcreteTupleExpression t)) {
+        return con(LInfinity);
+      }
+      List<? extends ConcreteExpression> fs = t.getFields();
+      ConcreteExpression var = switch (intOf(fs.get(1))) {
+        case 1 -> con(just, con(LP));
+        case 2 -> con(just, con(LH));
+        default -> con(nothing);
+      };
+      return con(LMax, var, fs.get(2), fs.get(3));
     }
 
     private int intOf(ConcreteExpression e) {
@@ -110,13 +127,6 @@ public class QuotBuild extends BaseMetaDefinition {
 
     private ConcreteExpression dec(ConcreteExpression e) {
       // Nullary nodes are encoded as a bare number.
-      if (e instanceof ConcreteNumberExpression n) {
-        int tag = n.getNumber().intValueExact();
-        if (tag == QuotMeta.EUNIV) {
-          return con(EUniv, defaultSort());
-        }
-        return con(EGoal);
-      }
       if (!(e instanceof ConcreteTupleExpression t)) {
         return con(EGoal);
       }
@@ -130,16 +140,19 @@ public class QuotBuild extends BaseMetaDefinition {
           return con(EApp, dec(fs.get(1)), dec(fs.get(2)), factory.ref(intOf(fs.get(3)) == 1 ? trueRef : falseRef));
         }
         case QuotMeta.ELAM -> {
-          return con(ELam, decTele(fs.get(1)), dec(fs.get(2)), defaultSort());
+          return con(ELam, decTele(fs.get(1)), dec(fs.get(2)), decSort(fs.get(3)));
         }
         case QuotMeta.EPI -> {
-          return con(EPiType, decTele(fs.get(1)), dec(fs.get(2)), defaultSort());
+          return con(EPiType, decTele(fs.get(1)), dec(fs.get(2)), decSort(fs.get(3)));
         }
         case QuotMeta.ESIGMA -> {
-          return con(ESigmaType, decTele(fs.get(1)), defaultSort());
+          return con(ESigmaType, decTele(fs.get(1)), decSort(fs.get(2)));
+        }
+        case QuotMeta.EUNIV -> {
+          return con(EUniv, decSort(fs.get(1)));
         }
         case QuotMeta.ETUPLE -> {
-          return con(ETuple, decList(fs.get(1)), con(EGoal));
+          return con(ETuple, decList(fs.get(1)), dec(fs.get(2)));
         }
         case QuotMeta.EPROJ -> {
           return con(EProj, dec(fs.get(1)), fs.get(2), factory.ref(intOf(fs.get(3)) == 1 ? trueRef : falseRef));
@@ -181,11 +194,11 @@ public class QuotBuild extends BaseMetaDefinition {
       }
     }
 
-    // A reference variable tuple (isGlobal, name, id-or-level) -> GlobalVar/LocalVar (EGoal type).
+    // A reference variable tuple (isGlobal, name, id-or-level, typeEnc) -> GlobalVar/LocalVar.
     private ConcreteExpression decVar(ConcreteExpression e) {
       List<? extends ConcreteExpression> fs = ((ConcreteTupleExpression) e).getFields();
       boolean global = intOf(fs.get(0)) == 1;
-      return con(global ? GlobalVar : LocalVar, fs.get(1), fs.get(2), con(EGoal), con(nothingE));
+      return con(global ? GlobalVar : LocalVar, fs.get(1), fs.get(2), dec(fs.get(3)), con(nothingE));
     }
 
     // MaybeExpr: a bare number -> nothingE; (JUST, enc) -> justE enc.
