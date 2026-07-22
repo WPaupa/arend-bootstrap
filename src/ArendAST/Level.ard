@@ -1,3 +1,4 @@
+\import Arith.Int
 \import Data.Maybe
 
 \data LevelType
@@ -28,4 +29,10 @@
 
 \func Prop => \new Sort { | lp => LMax nothing 0 0 | lh => LMax nothing 0 -1}
 \func Set (l : Level) => \new Sort { | lp => l | lh => LMax nothing 0 0}
+\func Set0 : Sort => \new Sort { | lp => LMax nothing 0 0 | lh => LMax nothing 0 0 }
 \func stdLevel => \new Sort { | lp => LMax (just LP) 0 0 | lh => LMax (just LH) 0 0}
+
+\func succLevel (l : Level) : Level \elim l
+  | LInfinity  => LInfinity
+  | LMax v o c => LMax v (isuc o) (isuc c)
+\func succSort (s : Sort) : Sort => \new Sort { | lp => succLevel s.lp | lh => succLevel s.lh }

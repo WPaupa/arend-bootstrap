@@ -14,10 +14,18 @@
   | nil     => return ()
   | x :: xs => f x >> forEachM f xs
 
-\func forEachIndex {M : Monad} {A : \Set} (n : Nat) (f : Fin n -> M A) : M (\Sigma) \elim n
+\func forEachIndexM {M : Monad} {A : \Set} (n : Nat) (f : Fin n -> M A) : M (\Sigma) \elim n
   | 0     => return ()
-  | suc n => f 0 >> forEachIndex n (\lam i => f (suc i))
+  | suc n => f 0 >> forEachIndexM n (\lam i => f (suc i))
 
-\func traverseM {M : Monad} {A B : \Set} (f : A -> M B) (xs : Array A) : M (Array B) \elim xs
+\func mapM {M : Monad} {A B : \Set} (f : A -> M B) (xs : Array A) : M (Array B) \elim xs
   | nil     => return nil
-  | x :: xs => f x >>= \lam y => traverseM f xs >>= \lam ys => return (y :: ys)
+  | x :: xs => f x >>= \lam y => mapM f xs >>= \lam ys => return (y :: ys)
+
+\func foldM {M : Monad} {A B : \Set} (f : B -> A -> M B) (acc : B) (xs : Array A) : M B \elim xs
+  | nil => return acc
+  | a :: as => f acc a >>= \lam fa => foldM f fa as
+
+\func foldIndexM {M : Monad} {A B : \Set} (h : B -> A -> B) (acc : B) (n : Nat) (f : Fin n -> M A) : M B \elim n
+  | 0     => return acc
+  | suc n => f 0 >>= \lam x => foldIndexM h (h acc x) n (\lam i => f (suc i))

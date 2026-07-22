@@ -1,0 +1,21 @@
+\import Data.Bool
+\import Meta
+\import Paths
+\import Paths.Meta
+\import Set
+\import Arith.Nat
+
+\func \infix 4 ==_B (n m : Nat) : Bool
+  | 0, 0 => true
+  | 0, suc m => false
+  | suc n, 0 => false
+  | suc n, suc m => n ==_B m
+
+\func decEqNat (n m : Nat) : Dec (n = m)
+  | 0, 0 => yes idp
+  | 0, suc m => no (\lam e => suc/=0 (inv e))
+  | suc n, 0 => no suc/=0
+  | suc n, suc m => \case decEqNat n m \with {
+    | yes e => yes (pmap suc e)
+    | no n1 => no (\lam e => n1 (pmap pred e))
+  }

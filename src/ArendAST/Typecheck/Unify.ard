@@ -1,0 +1,171 @@
+\import ArendAST.Expression
+\import ArendAST.Typecheck.Error
+\import Paths.Meta
+\import Set
+\import Utilities.Arith
+\import Utilities.Monad
+\import Utilities.Monad.Reader
+\import Arith.Int
+\import Monad.Do
+\import Data.Bool
+
+\func errUni : Env (\Sigma) => throw ErrUnify
+
+\func unifyVar (v1 v2 : Var) : Env (\Sigma)
+  | LocalVar _ i _ _, LocalVar _ j _ _ => \case i ==_B j \with {
+    | false => errUni
+    | true => return ()
+  }
+  | GlobalVar _ i _ _, GlobalVar _ j _ _ => \case i ==_B j \with {
+    | false => errUni
+    | true => return ()
+  }
+  | _, _ => errUni
+
+
+\func mapM2 {A : \Type} (f : A -> A -> Env (\Sigma)) (v1 v2 : Array A) : Env (\Sigma) \elim v1, v2
+  | nil, nil => return ()
+  | (v :: vs), (v' :: vs') => f v v' >> mapM2 f vs vs'
+  | _, _ => errUni
+
+\func unify (_ _ : Expr) : Env (\Sigma)
+  | EVar v, EVar v' => unifyVar v v'
+  | EInt i, EInt j => \case i IntRing.== j \with {
+    | false => errUni
+    | true => return ()
+  }
+  | EString s, EString w => \case s,w \with {}
+  | EApp t1 t2 e, EApp t1' t2' e' => unify t1 t1' >> unify t2 t2'
+  | ELam a t s, ELam a' t' s' => mapM2 unifyVar a a' >> unify t t'
+  | ETuple es t, ETuple es' t' => \case decEqNat es.len es'.len \with {
+    | no _ => errUni
+    | yes eq => forEachIndexM es.len (\lam i => unify (es i) (es' (rewriteI eq i))) >> unify t t'
+  }
+  | EProj t n b, EProj t' n' b' => \case n ==_B n' \with {
+    | false => errUni
+    | true => unify t t'
+  }
+  | EFunCall v l a, EFunCall v' l' a' => \case decEqNat a.len a'.len \with {
+    | no _ => errUni
+    | yes eq => unifyVar v v' >> forEachIndexM a.len (\lam i => unify (a i) (a' (rewriteI eq i)))
+  }
+  | EConsCall v l ta ca, EConsCall v' l' ta' ca' => \case decEqNat ta.len ta'.len, decEqNat ca.len ca'.len \with {
+    | yes eqt, yes eqc => do {
+      unifyVar v v',
+      forEachIndexM ta.len (\lam i => unify (ta i) (ta' (rewriteI eqt i))),
+      forEachIndexM ca.len (\lam i => unify (ca i) (ca' (rewriteI eqc i)))
+    }
+    | _, _ => errUni
+  }
+  | EDataCall v l a, EDataCall v' l' a' => \case decEqNat a.len a'.len \with {
+    | no _ => errUni
+    | yes eq => unifyVar v v' >> forEachIndexM a.len (\lam i => unify (a i) (a' (rewriteI eq i)))
+  }
+  | EFieldCall v e, EFieldCall v' e' => unifyVar v v' >> unify e e'
+  -- TODO how to comapre (impl : Nat -> Expr)
+  | EClassCall v l impl s vt, EClassCall v' l' impl' s' vt' => unifyVar v v' >> unifyVar vt vt'
+  | ENew p e, ENew p' e' => unifyMaybe p p' >> unify e e'
+  | EArray l et es tl, EArray l' et' es' tl' => \case decEqNat es.len es'.len \with {
+    | no _ => errUni
+    | yes eq => do {
+      unify et et',
+      forEachIndexM es.len (\lam i => unify (es i) (es' (rewriteI eq i))),
+      unifyMaybe tl tl'
+    }
+  }
+  | EPath l e1 e2, EPath l' e1' e2' => unify e1 e1' >> unify e2 e2'
+  | EPathAt e1 e2, EPathAt e1' e2' => unify e1 e1' >> unify e2 e2'
+  | ECase b ps rt rl m args, ECase b' ps' rt' rl' m' args' => \case decEqNat args.len args'.len \with {
+    | no _ => errUni
+    | yes eq => do {
+      mapM2 unifyVar ps ps',
+      unify rt rt',
+      unifyMaybe rl rl',
+      unifyMatch m m',
+      forEachIndexM args.len (\lam i => unify (args i) (args' (rewriteI eq i)))
+    }
+  }
+  | ELet b cs e, ELet b' cs' e' => \case decEqNat cs.len cs'.len \with {
+    | no _ => errUni
+    | yes eq => forEachIndexM cs.len (\lam i => unifyLetClause (cs i) (cs' (rewriteI eq i))) >> unify e e'
+  }
+  | ETyped v t, ETyped v' t' => unify v v' >> unify t t'
+  | EBox v t, EBox v' t' => unify v v' >> unify t t'
+  | EPEval e, EPEval e' => unify e e'
+  | EUniv s, EUniv s' => return ()
+  | EPiType a t s, EPiType a' t' s' => mapM2 unifyVar a a' >> unify t t'
+  | ESigmaType a s, ESigmaType a' s' => mapM2 unifyVar a a'
+  | EType v l cn args u, EType v' l' cn' args' u' => \case cn IntRing.== cn', decEqNat args.len args'.len \with {
+    | false, _ => errUni
+    | _, no _ => errUni
+    | true, yes eq => unifyVar v v' >> forEachIndexM args.len (\lam i => unify (args i) (args' (rewriteI eq i))) >> unify u u'
+  }
+  | ETypeDestr v e, ETypeDestr v' e' => unifyVar v v' >> unify e e'
+  | EError m, EError m' => unifyMaybe m m'
+  | EGoal, EGoal => return ()
+  | ETInt, ETInt => return ()
+  | ETString, ETString => return ()
+  | _, _ => errUni
+
+\func unifyMaybe (m1 m2 : MaybeExpr) : Env (\Sigma) \elim m1, m2
+  | nothingE, nothingE => return ()
+  | justE e, justE e' => unify e e'
+  | _, _ => errUni
+
+\func unifyMatch (m1 m2 : Match) : Env (\Sigma) \elim m1, m2
+  | NoMatch e, NoMatch e' => unify e e'
+  | DoMatch cs, DoMatch cs' => \case decEqNat cs.len cs'.len \with {
+    | no _ => errUni
+    | yes eq => forEachIndexM cs.len (\lam i => unifyClause (cs i) (cs' (rewriteI eq i)))
+  }
+  | IntervalMatch n ps fb, IntervalMatch n' ps' fb' => \case n ==_B n', decEqNat ps.len ps'.len \with {
+    | false, _ => errUni
+    | _, no _ => errUni
+    | true, yes eq => forEachIndexM ps.len (\lam i => unifyMaybe (ps i).1 (ps' (rewriteI eq i)).1 >> unifyMaybe (ps i).2 (ps' (rewriteI eq i)).2) >> unifyMaybeMatch fb fb'
+  }
+  | _, _ => errUni
+
+\func unifyMaybeMatch (m1 m2 : MaybeMatch) : Env (\Sigma) \elim m1, m2
+  | nothingM, nothingM => return ()
+  | justM m, justM m' => unifyMatch m m'
+  | _, _ => errUni
+
+\func unifyClause (c1 c2 : Clause) : Env (\Sigma) \elim c1, c2
+  | cClause ps b, cClause ps' b' => \case decEqNat ps.len ps'.len \with {
+    | no _ => errUni
+    | yes eq => forEachIndexM ps.len (\lam i => unifyPattern (ps i) (ps' (rewriteI eq i))) >> unifyMaybe b b'
+  }
+
+\func unifyPattern (p1 p2 : Pattern) : Env (\Sigma) \elim p1, p2
+  | PVar v, PVar v' => unifyVar v v'
+  | PConstr v ps, PConstr v' ps' => \case decEqNat ps.len ps'.len \with {
+    | no _ => errUni
+    | yes eq => unifyVar v v' >> forEachIndexM ps.len (\lam i => unifyPattern (ps i) (ps' (rewriteI eq i)))
+  }
+  | PAbsurd, PAbsurd => return ()
+  | _, _ => errUni
+
+\func unifyLetClause (c1 c2 : LetClause) : Env (\Sigma) \elim c1, c2
+  | cLetClause n b t sf, cLetClause n' b' t' sf' => do {
+    unifyLetPattern n n',
+    unify b b',
+    unifyMaybe t t'
+  }
+
+\func unifyLetPattern (p1 p2 : LetPattern) : Env (\Sigma) \elim p1, p2
+  | LPName n id, LPName n' id' => \case id ==_B id' \with {
+    | false => errUni
+    | true => return ()
+  }
+  | LPTuple l, LPTuple l' => \case decEqNat l.len l'.len \with {
+    | no _ => errUni
+    | yes eq => forEachIndexM l.len (\lam i => unifyLetPattern (l i) (l' (rewriteI eq i)))
+  }
+  | LPRecord l, LPRecord l' => \case decEqNat l.len l'.len \with {
+    | no _ => errUni
+    | yes eq => forEachIndexM l.len (\lam i => \case (l i).1 ==_B (l' (rewriteI eq i)).1 \with {
+      | false => errUni
+      | true => unifyLetPattern (l i).2 (l' (rewriteI eq i)).2
+    })
+  }
+  | _, _ => errUni

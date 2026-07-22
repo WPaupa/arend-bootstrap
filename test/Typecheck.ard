@@ -1,0 +1,26 @@
+\import ArendAST.Expression
+\import ArendAST.Quote
+\import ArendAST.Typecheck.Typecheck
+\import ArendAST.Typecheck.Env
+\import Arith.Nat
+\import Debug.Meta
+\import Meta
+\import Utilities.Monad.Reader
+\import ArendAST.Level
+\import Data.Maybe
+\import Paths
+\import ArendAST.Typecheck.Error
+
+\func combK : Expr => quot { (
+  (\lam (A : \Type 5 7) (x : A) (y : A) => x),
+  (x$0 : \Prop)
+) : \Sigma (u : \Pi (A : \Type 0 0) (x : A) (y : A) -> A) (v : \oo-Type 0)}
+
+\func typecheckK_p => println
+    ((typecheck combK).runReaderT
+        (extend (GlobalVar "x" 0 (EUniv Prop) nothingE) emptyEnv))
+
+\func str : Expr => quot { "x" }
+
+\func typecheckStr_p => println
+  ((typecheck str).runReaderT emptyEnv)

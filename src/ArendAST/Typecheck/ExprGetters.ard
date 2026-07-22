@@ -1,17 +1,22 @@
 \import Analysis.Measure.SimpleFunctions
 \import ArendAST.Expression
 \import ArendAST.Level
+\import ArendAST.Reduction.Normalize
 \import ArendAST.Typecheck.Env
 \import ArendAST.Typecheck.Error
 \import Arith.Nat
+\import Arith.Int
 \import Data.Array
 \import Data.Bool
+\import Data.Fin
 \import Data.Maybe
 \import Function.Meta
 \import Monad.Do
+\import Paths.Meta
 \import Set
 \import Utilities.Monad
 \import Utilities.Monad.Reader
+\import Utilities.Arith
 
 \open NatSemiring
 
@@ -20,17 +25,15 @@
   | LocalVar _ _ t _  => t
 
 \func varEqual (_ _ : Var) : Bool
-  | GlobalVar VName VId VType VEvaluation, GlobalVar VName1 VId1 VType1 VEvaluation1 => VId == VId1
-  | LocalVar VName index VType VEvaluation, LocalVar VName1 index1 VType1 VEvaluation1 => index == index1
+  | GlobalVar VName VId VType VEvaluation, GlobalVar VName1 VId1 VType1 VEvaluation1 => VId ==_B VId1
+  | LocalVar VName index VType VEvaluation, LocalVar VName1 index1 VType1 VEvaluation1 => index ==_B index1
   | _, _ => false
-
-\func unify (t1 t2 : Expr) : Env (\Sigma) => {?}
 
 \func checkIsUniv (_ : Expr) : Env (\Sigma)
   | EUniv _ => return ()
   | EVar (GlobalVar _ _ _ (justE (EUniv _))) => return ()
   | EVar (LocalVar  _ _ _ (justE (EUniv _))) => return ()
-  | t => liftReader (err (ErrNotUniv t))
+  | t => throw (ErrNotUniv t)
 
 \func getSigmaType (_ : Expr) : Maybe (Array Var)
   | ESigmaType vs s => just vs
@@ -44,15 +47,38 @@
   | EVar (LocalVar  _ _ _ (justE (EPiType vs v s))) => just (vs, v, s)
   | t => nothing
 
-\func letClauseVar (_ : LetClause) : Result Var
+\func projComponentType (vs : Array Var) (body : MaybeExpr) (k i : Nat) : Expr \elim vs, i
+  | nil, _       => EGoal
+  | v :: _, 0    => varType v
+  | v :: vs, suc i => \case body \with {
+    | justE e  => projComponentType (substVArray vs v (EProj e k false)) body (suc k) i
+    | nothingE => projComponentType vs body (suc k) i
+  }
+
+\func letClauseVar (_ : LetClause) : Env (Array Var)
   | cLetClause name body (justE type) true => letPatternVar type name (justE body)
   | cLetClause name body (justE type) false => letPatternVar type name nothingE
-  | _ => err ErrUnknownType \where {
-  \func letPatternVar (rtype : Expr) (pat : LetPattern) (body : MaybeExpr) : Result Var \elim pat
-    | LPName name id => ok (GlobalVar name id rtype body)
-    | LPTuple l => err ErrUnknownType
-    | LPRecord l => err ErrUnknownType -- TODO
+  | _ => throw ErrUnknownType \where {
+  \func letPatternVar (rtype : Expr) (pat : LetPattern) (body : MaybeExpr) : Env (Array Var) \elim pat
+    | LPName name id => return (GlobalVar name id rtype body :: nil)
+    | LPTuple l => \case getSigmaType rtype \with {
+      | nothing => throw (ErrNotSigma rtype)
+      | just vs => \case vs.len ==_B l.len \with {
+        | false => throw (ErrArity vs.len l.len)
+        | true => foldIndexM (++) nil l.len (\lam i => letPatternVar (projComponentType vs body 0 i) (l i)
+            (MaybeExpr.map (\lam e => EProj e i false) body))
+      }
+    }
+    | LPRecord l => {?} -- TODO
 }
+
+\func letClausesVars (cs : Array LetClause) : Env (Array Var) \elim cs
+  | nil     => return nil
+  | c :: cs => do {
+    \lam cv => letClauseVar c,
+    \lam csv => letClausesVars cs,
+    return (cv ++ csv)
+  }
 
 \func addEvaluations (_ : Array Var) (_ : Array Expr) : Array Var
   | nil, _ => nil
@@ -63,7 +89,7 @@
 \func scopeCheck (v : Var) : Env (\Sigma) => do {
   \lam (env : CheckEnv) => askT,
   \case findVar v env.vars \with {
-    | false => liftReader (err (ErrUnbound v))
+    | false => throw (ErrUnbound v)
     | true => return ()
   }
 } \where {
@@ -71,3 +97,20 @@
     | nil => false
     | h :: t => varEqual h v or findVar v t
 }
+
+\func expectedArgType (params : Array Var) (args : Array Expr) (i : Nat) : Expr \elim params, args, i
+  | nil, _, _              => EGoal
+  | v :: _, _, 0           => varType v
+  | v :: params, nil, suc i        => expectedArgType params nil i
+  | v :: params, a :: args, suc i  => expectedArgType (substVArray params v a) args i
+
+
+\func spineResult (params : Array Var) (cod : Expr) (s : Sort) (args : Array Expr) : Expr \elim params, args
+  | nil, _              => cod
+  | params, nil         => EPiType params cod s
+  | v :: params, a :: args => spineResult (substVArray params v a) (substitute cod v a) s args
+
+\func substParams (params : Array Var) (body : Expr) (args : Array Expr) : Expr \elim params, args
+  | nil, _              => body
+  | _, nil              => body
+  | v :: params, a :: args => substParams params (substitute body v a) args

@@ -1,8 +1,12 @@
 \import Algebra.Meta
 \import ArendAST.Expression
+\import ArendAST.Level
 \import ArendAST.Typecheck.Env
 \import ArendAST.Typecheck.Error
 \import ArendAST.Typecheck.ExprGetters
+\import Arith.Int
+\import Utilities.Arith
+\import ArendAST.Typecheck.Unify
 \import Arith.Nat
 \import Data.Bool
 \import Function.Meta
@@ -30,37 +34,42 @@
     \lam te1 => typecheck e1,
     \lam te2 => typecheck e2,
     \case getPiType te1 \with {
-      | nothing => liftReader (err (ErrNotPi te1))
-      | just (nil, _, _) => liftReader (err (ErrNotPi te1))
+      | nothing => throw (ErrNotPi te1)
+      | just (nil, _, _) => throw (ErrNotPi te1)
       | just (v :: nil, e, _) => do {
-        unify te2 e,
+        unify te2 (varType v),
         return (normalize (substitute e v e2))
       }
       | just (v :: vs, e, s) => do {
-        unify te2 e,
+        unify te2 (varType v),
         return (EPiType (normVArray (substVArray vs v e2)) (normalize (substitute e v e2)) s)
       }
     }
   }
   | ELam a e resultSort => do {
     -- this is probably slower than doing it with lists
-    forEachIndex a.len (\lam i => localT (extendArray (take i a (linarith (fin_< i)))) (typecheckVar (a i))),
-    localT (extendArray a) (typecheck e)
+    forEachIndexM a.len (\lam i => localT (extendArray (take i a (linarith (fin_< i)))) (typecheckVar (a i))),
+    \lam te => localT (extendArray a) (typecheck e),
+    -- a lambda's type is the Pi type over its parameters into the body's type
+    return (EPiType a te resultSort)
   }
   | ETuple elements e => \case getSigmaType e \with {
-    | nothing => liftReader (err (ErrNotSigma e))
-    | just a => \case NatSemiring.decideEq a.len elements.len \with {
-      | no _ => liftReader (err (ErrArity a.len elements.len))
+    | nothing => throw (ErrNotSigma e)
+    | just a => \case decEqNat a.len elements.len \with {
+      | no _ => throw (ErrArity a.len elements.len)
       | yes eq => do {
         -- for each element,
-        forEachIndex a.len (\lam i => localT
+        forEachIndexM a.len (\lam i => localT
           -- add the types of elements before it into the context
           (extendArray
             -- with inserted elements as evaluations
             (addEvaluations (take i a (linarith (fin_< i))) (take i elements (linarith (fin_< i))))
           )
           -- and typecheck the next one
-          (typecheck (elements (rewriteI eq i)))),
+          (do {
+            \lam t => typecheck (elements (rewriteI eq i)),
+            unify t (varType (a i))
+          })),
         return e
       }
     }
@@ -68,37 +77,147 @@
   | EProj e n isProperty => do {
     \lam te => typecheck e,
     \case getSigmaType te \with {
-      | nothing => liftReader (err (ErrNotSigma te))
-      | just a => \case NatSemiring.trichotomy a.len n \with {
-        | greater gr => return (varType (nth n a gr))
+      | nothing => throw (ErrNotSigma te)
+      | just a => \case nat_<=-dec.nat_<=_Bool (suc n) a.len \as x, idp : nat_<=-dec.nat_<=_Bool (suc n) a.len = x \with {
+        | true, p => return (varType (nth n a (nat_<-dec {n} {a.len} {So.toSo p})))
         -- TODO this feels wrong, what if the varType has some variables bound earlier in the sigma-type
-        | _ => liftReader (err (ErrArity a.len n))
+        | false, _ => throw (ErrArity a.len n)
       }
     }
   }
-  | EFunCall v l a => {?}
-  | EConsCall v l typeArgs consArgs => {?}
-  | EDataCall v l a => {?}
-  | EFieldCall v e => {?}
-  | EClassCall v l implementations s v1 => {?}
-  | ENew parent e => {?}
-  | EArray l e elems tail => {?}
-  | EPath l e1 e2 => {?}
-  | EPathAt e1 e2 => {?}
-  | ECase isSFunc a e returnLevel m args => {?}
-  | ELet isSFunc a e => {?}
-  | ETyped e e1 => {?}
-  | EBox e e1 => {?}
-  | EPEval e => {?}
-  | EUniv s => {?}
-  | EPiType a e s => {?}
-  | ESigmaType a s => {?}
-  | EType type l clauseNo args e => {?}
-  | ETypeDestr type e => {?}
-  | EError m => {?}
-  | EGoal => {?}
-  | ETInt => {?}
-  | ETString => {?}
+  | EFunCall v l a => \case getPiType (varType v) \with {
+    | nothing => \case a \with {
+      | nil => return (varType v)
+      | _ :: _ => throw (ErrNotPi (varType v))
+    }
+    | just (params, cod, s) => do {
+      forEachIndexM a.len (\lam i => do {
+        \lam ti => typecheck (a i),
+        unify ti (expectedArgType params a i)
+      }),
+      return (normalize (spineResult params cod s a))
+    }
+  }
+  | EConsCall v l typeArgs consArgs => \case getPiType (varType v) \with {
+    | nothing => throw (ErrNotPi (varType v))
+    | just (params, cod, s) => do {
+      forEachIndexM typeArgs.len (\lam i => do {
+        \lam ti => typecheck (typeArgs i),
+        unify ti (expectedArgType params (typeArgs ++ consArgs) i)
+      }),
+      forEachIndexM consArgs.len (\lam i => do {
+        \lam ti => typecheck (consArgs i),
+        unify ti (expectedArgType params (typeArgs ++ consArgs) (typeArgs.len Nat.+ i))
+      }),
+      return (normalize (spineResult params cod s (typeArgs ++ consArgs)))
+    }
+  }
+  | EDataCall v l a => \case getPiType (varType v) \with {
+    | nothing => \case a \with {
+      | nil => return (varType v)
+      | _ :: _ => throw (ErrNotPi (varType v))
+    }
+    | just (params, cod, s) => do {
+      forEachIndexM a.len (\lam i => do {
+        \lam ti => typecheck (a i),
+        unify ti (expectedArgType params a i)
+      }),
+      return (normalize (spineResult params cod s a))
+    }
+  }
+  -- the field's type is a Pi over "this", so we apply it to e
+  | EFieldCall v e => \case getPiType (varType v) \with {
+    | nothing => throw (ErrNotPi (varType v))
+    | just (params, cod, s) => do {
+      \lam te => typecheck e,
+      unify te (expectedArgType params (e :: nil) 0),
+      return (normalize (spineResult params cod s (e :: nil)))
+    }
+  }
+  -- implementations are an opaque Nat -> Expr, TODO traverse them
+  | EClassCall v l implementations s v1 => return (EUniv s)
+  | ENew parent e => do {
+    typecheckMaybe parent,
+    typecheck e,
+    return (normalize e)
+  }
+  -- Array type itself is not representable in this AST, TODO fix
+  -- for now we return a goal placeholder for the result type.
+  | EArray l e elems tail => do {
+    \lam te => typecheck e,
+    checkIsUniv te,
+    forEachIndexM elems.len (\lam i => do {
+      \lam ti => typecheck (elems i),
+      unify ti e
+    }),
+    typecheckMaybe tail,
+    return EGoal
+  }
+  -- TODO represent the prelude path result type.
+  | EPath l e1 e2 => do {
+    typecheck e1,
+    typecheck e2,
+    return EGoal
+  }
+  -- TODO represent the applied path result type.
+  | EPathAt e1 e2 => do {
+    typecheck e1,
+    typecheck e2,
+    return EGoal
+  }
+  | ECase isSFunc params retType returnLevel m args => do {
+    forEachIndexM args.len (\lam i => do {
+      \lam ti => typecheck (args i),
+      unify ti (expectedArgType params args i)
+    }),
+    forEachIndexM params.len (\lam i => localT (extendArray (take i params (linarith (fin_< i)))) (typecheckVar (params i))),
+    localT (extendArray params) (typecheck retType),
+    return (normalize (substParams params retType args))
+  }
+  | ELet isSFunc clauses e => do {
+    forEachIndexM clauses.len (\lam i => typecheckLetClause (clauses i)),
+    \lam vars => letClausesVars clauses,
+    localT (extendArray vars) (typecheck e)
+  }
+  | ETyped e t => do {
+    \lam te => typecheck e,
+    unify te t,
+    return (normalize t)
+  }
+  | EBox e t => do {
+    \lam te => typecheck e,
+    unify te t,
+    return (normalize t)
+  }
+  | EPEval e => typecheck e
+  | EUniv s => \case s.lp \with {
+    | LInfinity => throw ErrInfinityUniverse
+    | LMax _ _ _ => return (EUniv (succSort s))
+  }
+  | EPiType params cod s => do {
+    forEachIndexM params.len (\lam i => localT (extendArray (take i params (linarith (fin_< i)))) (typecheckVar (params i))),
+    localT (extendArray params) (typecheck cod),
+    return (EUniv s)
+  }
+  | ESigmaType params s => do {
+    forEachIndexM params.len (\lam i => localT (extendArray (take i params (linarith (fin_< i)))) (typecheckVar (params i))),
+    return (EUniv s)
+  }
+  | EType type l clauseNo args underlying => do {
+    typecheck underlying,
+    forEachIndexM args.len (\lam i => typecheck (args i)),
+    return (normalize (EFunCall type l args))
+  }
+  -- TODO
+  | ETypeDestr type e => do {
+    typecheck e,
+    return EGoal
+  }
+  | EError (justE t) => fmapM (\lam e => EError (justE e)) (typecheck t)
+  | EError nothingE => return (EError nothingE)
+  | EGoal => return EGoal
+  | ETInt => return (EUniv Set0)
+  | ETString => return (EUniv Set0)
 
 
 \func typecheckVar (_ : Var) : Env Expr
@@ -126,3 +245,10 @@
     checkIsUniv ttype,
     return VType
   }
+
+\func typecheckMaybe (m : MaybeExpr) : Env (\Sigma) \elim m
+  | nothingE => return ()
+  | justE e  => typecheck e >> return ()
+
+\func typecheckLetClause (c : LetClause) : Env (\Sigma) \elim c
+  | cLetClause name body type _ => typecheck body >> typecheckMaybe type
