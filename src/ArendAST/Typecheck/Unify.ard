@@ -110,12 +110,12 @@
   | ETString, ETString => return ()
   | _, _ => errUni
 
-\func unifyMaybe (m1 m2 : MaybeExpr) : Env (\Sigma) \elim m1, m2
+\func unifyMaybe (_ _ : MaybeExpr) : Env (\Sigma)
   | nothingE, nothingE => return ()
   | justE e, justE e' => unify e e'
   | _, _ => errUni
 
-\func unifyMatch (m1 m2 : Match) : Env (\Sigma) \elim m1, m2
+\func unifyMatch (_ _ : Match) : Env (\Sigma)
   | NoMatch e, NoMatch e' => unify e e'
   | DoMatch cs, DoMatch cs' => \case decEqNat cs.len cs'.len \with {
     | no _ => errUni
@@ -128,18 +128,18 @@
   }
   | _, _ => errUni
 
-\func unifyMaybeMatch (m1 m2 : MaybeMatch) : Env (\Sigma) \elim m1, m2
+\func unifyMaybeMatch (_ _ : MaybeMatch) : Env (\Sigma)
   | nothingM, nothingM => return ()
   | justM m, justM m' => unifyMatch m m'
   | _, _ => errUni
 
-\func unifyClause (c1 c2 : Clause) : Env (\Sigma) \elim c1, c2
+\func unifyClause (_ _ : Clause) : Env (\Sigma)
   | cClause ps b, cClause ps' b' => \case decEqNat ps.len ps'.len \with {
     | no _ => errUni
     | yes eq => forEachIndexM ps.len (\lam i => unifyPattern (ps i) (ps' (rewriteI eq i))) >> unifyMaybe b b'
   }
 
-\func unifyPattern (p1 p2 : Pattern) : Env (\Sigma) \elim p1, p2
+\func unifyPattern (_ _ : Pattern) : Env (\Sigma)
   | PVar v, PVar v' => unifyVar v v'
   | PConstr v ps, PConstr v' ps' => \case decEqNat ps.len ps'.len \with {
     | no _ => errUni
@@ -148,14 +148,14 @@
   | PAbsurd, PAbsurd => return ()
   | _, _ => errUni
 
-\func unifyLetClause (c1 c2 : LetClause) : Env (\Sigma) \elim c1, c2
+\func unifyLetClause (_ _ : LetClause) : Env (\Sigma)
   | cLetClause n b t sf, cLetClause n' b' t' sf' => do {
     unifyLetPattern n n',
     unify b b',
     unifyMaybe t t'
   }
 
-\func unifyLetPattern (p1 p2 : LetPattern) : Env (\Sigma) \elim p1, p2
+\func unifyLetPattern (_ _ : LetPattern) : Env (\Sigma)
   | LPName n id, LPName n' id' => \case id ==_B id' \with {
     | false => errUni
     | true => return ()
