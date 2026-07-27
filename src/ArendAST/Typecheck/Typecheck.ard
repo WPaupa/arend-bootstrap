@@ -1,4 +1,5 @@
 \import Algebra.Meta
+\import ArendAST.Definition
 \import ArendAST.Expression
 \import ArendAST.Level
 \import ArendAST.Typecheck.Env
@@ -87,57 +88,70 @@
       }
     }
   }
-  | EFunCall v l a => \case getPiType (varType v) \with {
-    | nothing => \case a \with {
-      | nil => return (varType v)
-      | _ :: _ => throw (ErrNotPi (varType v))
-    }
-    | just (params, cod, s) => do {
-      forEachIndexM a.len (\lam i => do {
-        \lam ti => typecheck (a i),
-        unify ti (expectedArgType params a i)
-      }),
-      normalize (spineResult params cod s a)
-    }
-  }
-  | EConsCall v l typeArgs consArgs => \case getPiType (varType v) \with {
-    | nothing => throw (ErrNotPi (varType v))
-    | just (params, cod, s) => do {
-      forEachIndexM typeArgs.len (\lam i => do {
-        \lam ti => typecheck (typeArgs i),
-        unify ti (expectedArgType params (typeArgs ++ consArgs) i)
-      }),
-      forEachIndexM consArgs.len (\lam i => do {
-        \lam ti => typecheck (consArgs i),
-        unify ti (expectedArgType params (typeArgs ++ consArgs) (typeArgs.len Nat.+ i))
-      }),
-      normalize (spineResult params cod s (typeArgs ++ consArgs))
+  | EFunCall v l a => do {
+    \lam env => askT,
+    \case getDef env (getVarId v) \with {
+      | just (DFunc f) => do {
+        forEachIndexM a.len (\lam i => do {
+          \lam ti => typecheck (a i),
+          unify ti (expectedArgType f.params a i)
+        }),
+        normalize (spineResult f.params f.resultType Set0 a)
+      }
+      | _ => throw (ErrUnbound v)
     }
   }
-  | EDataCall v l a => \case getPiType (varType v) \with {
-    | nothing => \case a \with {
-      | nil => return (varType v)
-      | _ :: _ => throw (ErrNotPi (varType v))
-    }
-    | just (params, cod, s) => do {
-      forEachIndexM a.len (\lam i => do {
-        \lam ti => typecheck (a i),
-        unify ti (expectedArgType params a i)
-      }),
-      normalize (spineResult params cod s a)
-    }
-  }
-  -- the field's type is a Pi over "this", so we apply it to e
-  | EFieldCall v e => \case getPiType (varType v) \with {
-    | nothing => throw (ErrNotPi (varType v))
-    | just (params, cod, s) => do {
-      \lam te => typecheck e,
-      unify te (expectedArgType params (e :: nil) 0),
-      normalize (spineResult params cod s (e :: nil))
+  | EConsCall v l typeArgs consArgs => do {
+    \lam env => askT,
+    \case getDef env (getVarId v) \with {
+      | just (DCons c) => \case getDef env c.datatype \with {
+        | just (DData d) => do {
+          forEachIndexM typeArgs.len (\lam i => do {
+            \lam ti => typecheck (typeArgs i),
+            unify ti (expectedArgType (d.params ++ c.params) (typeArgs ++ consArgs) i)
+          }),
+          forEachIndexM consArgs.len (\lam i => do {
+            \lam ti => typecheck (consArgs i),
+            unify ti (expectedArgType (d.params ++ c.params) (typeArgs ++ consArgs) (typeArgs.len Nat.+ i))
+          }),
+          normalize (EDataCall (GlobalVar d.name c.datatype (EUniv d.sort) nothingE) l typeArgs)
+        }
+        | _ => throw (ErrUnbound v)
+      }
+      | _ => throw (ErrUnbound v)
     }
   }
-  -- TODO traverse implementations
-  | EClassCall v l implementations s v1 => return (EUniv s)
+  | EDataCall v l a => do {
+    \lam env => askT,
+    \case getDef env (getVarId v) \with {
+      | just (DData d) => do {
+        forEachIndexM a.len (\lam i => do {
+          \lam ti => typecheck (a i),
+          unify ti (expectedArgType d.params a i)
+        }),
+        normalize (spineResult d.params (EUniv d.sort) d.sort a)
+      }
+      | _ => throw (ErrUnbound v)
+    }
+  }
+  | EFieldCall v e => do {
+    \lam env => askT,
+    \case getDef env (getVarId v) \with {
+      | just (DField fd) => \case getPiType fd.type \with {
+        | just (params, cod, s) => do {
+          \lam te => typecheck e,
+          unify te (expectedArgType params (e :: nil) 0),
+          normalize (spineResult params cod s (e :: nil))
+        }
+        | nothing => throw (ErrNotPi fd.type)
+      }
+      | _ => throw (ErrUnbound v)
+    }
+  }
+  | EClassCall v l implementations s v1 => do {
+    forEachIndexM implementations.len (\lam i => typecheckVar (implementations i)),
+    return (EUniv s)
+  }
   | ENew parent e => do {
     typecheckMaybe parent,
     typecheck e,

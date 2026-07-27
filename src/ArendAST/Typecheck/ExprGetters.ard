@@ -1,9 +1,11 @@
 \import Analysis.Measure.SimpleFunctions
+\import ArendAST.Definition
 \import ArendAST.Expression
 \import ArendAST.Level
 \import ArendAST.Reduction.Normalize
 \import ArendAST.Typecheck.Env
 \import ArendAST.Typecheck.Error
+\import ArendAST.Typecheck.Unify
 \import Arith.Nat
 \import Arith.Int
 \import Data.Array
@@ -24,10 +26,9 @@
   | GlobalVar _ _ t _ => t
   | LocalVar _ _ t _  => t
 
-\func varEqual (_ _ : Var) : Bool
-  | GlobalVar VName VId VType VEvaluation, GlobalVar VName1 VId1 VType1 VEvaluation1 => VId ==_B VId1
-  | LocalVar VName index VType VEvaluation, LocalVar VName1 index1 VType1 VEvaluation1 => index ==_B index1
-  | _, _ => false
+\func getVarId (_ : Var) : Nat
+  | GlobalVar _ i _ _ => i
+  | LocalVar _ i _ _  => i
 
 \func checkIsUniv (_ : Expr) : Env (\Sigma)
   | EUniv _ => return ()
@@ -55,21 +56,35 @@
     | nothingE => projComponentType vs body (suc k) i
   }
 
+\func fieldInstType (fd : FieldDef) (body : Expr) : Env Expr => \case getPiType fd.type \with {
+  | just (ps, cod, s) => return $ spineResult ps cod s (body :: nil)
+  | nothing => throw $ ErrNotPi fd.type
+}
+
 \func letClauseVar (_ : LetClause) : Env (Array Var)
-  | cLetClause name body (justE type) true => letPatternVar type name (justE body)
-  | cLetClause name body (justE type) false => letPatternVar type name nothingE
+  | cLetClause name body (justE type) true => letPatternVar type name body (justE body)
+  | cLetClause name body (justE type) false => letPatternVar type name body nothingE
   | _ => throw ErrUnknownType \where {
-  \func letPatternVar (rtype : Expr) (pat : LetPattern) (body : MaybeExpr) : Env (Array Var) \elim pat
+  \func letPatternVar (rtype : Expr) (pat : LetPattern) (bodyR : Expr) (body : MaybeExpr) : Env (Array Var) \elim pat
     | LPName name id => return (GlobalVar name id rtype body :: nil)
     | LPTuple l => \case getSigmaType rtype \with {
       | nothing => throw (ErrNotSigma rtype)
       | just vs => \case vs.len ==_B l.len \with {
         | false => throw (ErrArity vs.len l.len)
         | true => foldIndexM (++) nil l.len (\lam i => letPatternVar (projComponentType vs body 0 i) (l i)
-            (MaybeExpr.map (\lam e => EProj e i false) body))
+            bodyR (MaybeExpr.map (\lam e => EProj e i false) body))
       }
     }
-    | LPRecord l => {?} -- TODO
+    | LPRecord l => do {
+      \lam env => askT,
+      foldIndexM (++) nil l.len (\lam i => \case getDef env (l i).1 \with {
+        | just (DField fd) => do {
+          \lam instType => fieldInstType fd bodyR,
+          letPatternVar instType (l i).2 bodyR
+            (MaybeExpr.map (\lam e => EFieldCall (GlobalVar fd.name (l i).1 fd.type nothingE) e) body) }
+        | _ => throw ErrUnknownType
+      })
+    }
 }
 
 \func letClausesVars (cs : Array LetClause) : Env (Array Var) \elim cs
@@ -95,7 +110,7 @@
 } \where {
   \func findVar (v : Var) (vs : Array Var) : Bool \elim vs
     | nil => false
-    | h :: t => varEqual h v or findVar v t
+    | h :: t => eqVar h v or findVar v t
 }
 
 \func expectedArgType (params : Array Var) (args : Array Expr) (i : Nat) : Expr \elim params, args, i

@@ -66,8 +66,7 @@
     | yes eq => unifyVar v v' >> forEachIndexM a.len (\lam i => unify (a i) (a' (rewriteI eq i)))
   }
   | EFieldCall v e, EFieldCall v' e' => unifyVar v v' >> unify e e'
-  -- TODO compare implementations
-  | EClassCall v l impl s vt, EClassCall v' l' impl' s' vt' => unifyVar v v' >> unifyVar vt vt'
+  | EClassCall v l impl s vt, EClassCall v' l' impl' s' vt' => unifyVar v v' >> mapM2 unifyVar impl impl' >> unifyVar vt vt'
   | ENew p e, ENew p' e' => unifyMaybe p p' >> unify e e'
   | EArray l et es tl, EArray l' et' es' tl' => \case decEqNat es.len es'.len \with {
     | no _ => errUni
