@@ -44,11 +44,14 @@
       (mkArray (\lam i => closure f (typeArgs i))) (mkArray (\lam i => closure f (consArgs i)))
   | EDataCall v1 l a => EDataCall (closureVar f v1) l (mkArray (\lam i => closure f (a i)))
   | EFieldCall v1 e => EFieldCall (closureVar f v1) (f (closure f e))
-  | EClassCall v1 l implementations s v2 => EClassCall (closureVar f v1) l implementations s (closureVar f v2) -- TODO
+  | EClassCall v1 l implementations s v2 =>
+      EClassCall (closureVar f v1) l (\lam i => closureVar f (implementations i)) s (closureVar f v2)
   | ENew parent e => ENew (closureMaybe f parent) (f (closure f e))
   | EArray l e elems tail => EArray l (f (closure f e)) (mkArray (\lam i => closure f (elems i))) (closureMaybe f tail)
+  | EArrayType len elemType => EArrayType (f (closure f len)) (f (closure f elemType))
   | EPath l e1 e2 => EPath l (f (closure f e1)) (f (closure f e2))
   | EPathAt e1 e2 => EPathAt (f (closure f e1)) (f (closure f e2))
+  | EInterval => EInterval
   | ECase isSFunc a e returnLevel m args => ECase isSFunc (mkArray (\lam i => closureVar f (a i)))
       (f (closure f e)) returnLevel (closureMatch f m) (mkArray (\lam i => closure f (args i)))
   | ELet isSFunc a e => ELet isSFunc (mkArray (\lam i => closureLetClause f (a i))) (f (closure f e))

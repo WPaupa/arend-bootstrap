@@ -76,6 +76,8 @@
       unifyMaybe tl tl'
     }
   }
+  | EArrayType len et, EArrayType len' et' => unify len len' >> unify et et'
+  | EInterval, EInterval => return ()
   | EPath l e1 e2, EPath l' e1' e2' => unify e1 e1' >> unify e2 e2'
   | EPathAt e1 e2, EPathAt e1' e2' => unify e1 e1' >> unify e2 e2'
   | ECase b ps rt rl m args, ECase b' ps' rt' rl' m' args' => \case decEqNat args.len args'.len \with {

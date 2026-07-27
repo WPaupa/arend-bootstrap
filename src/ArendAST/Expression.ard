@@ -75,6 +75,8 @@
   | ESigmaType (Array Var) Sort
   | ETInt
   | ETString
+  | EInterval
+  | EArrayType (len : Expr) (elemType : Expr)
   -- \type synonym
   | EType (type : Var) LevelArgs (clauseNo : Int) (args : Array Expr) (underlying : Expr)
   | ETypeDestr (type : Var) Expr

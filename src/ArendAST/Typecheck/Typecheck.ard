@@ -35,18 +35,11 @@
     \lam te1 => typecheck e1,
     \lam te2 => typecheck e2,
     \case getPiType te1 \with {
-      | nothing => throw (ErrNotPi te1)
-      | just (nil, _, _) => throw (ErrNotPi te1)
-      | just (v :: nil, e, _) => do {
-        unify te2 (varType v),
-        normalize (substitute e v e2)
+      | just (p :: ps, cod, s) => do {
+        unify te2 (varType p),
+        normalize (spineResult (p :: ps) cod s (e2 :: nil))
       }
-      | just (v :: vs, e, s) => do {
-        unify te2 (varType v),
-        \lam vns => normVArray (substVArray vs v e2),
-        \lam en  => normalize (substitute e v e2),
-        return (EPiType vns en s)
-      }
+      | _ => throw (ErrNotPi te1)
     }
   }
   | ELam a e resultSort => do {
@@ -157,30 +150,48 @@
     typecheck e,
     normalize e
   }
-  -- Array type itself is not representable in this AST, TODO fix
-  -- for now we return a goal placeholder for the result type.
   | EArray l e elems tail => do {
-    \lam te => typecheck e,
-    checkIsUniv te,
+    typecheck e,
     forEachIndexM elems.len (\lam i => do {
       \lam ti => typecheck (elems i),
-      unify ti e
+      \lam eti => normalize (EApp e (EInt (pos i)) true),
+      unify ti eti
     }),
     typecheckMaybe tail,
-    return EGoal
+    -- FUTURE: calculate length of tail
+    return (EArrayType (\case tail \with { | nothingE => EInt (pos elems.len) | justE _ => EGoal }) e)
   }
-  -- TODO represent the prelude path result type.
   | EPath l e1 e2 => do {
     typecheck e1,
-    typecheck e2,
-    return EGoal
+    \lam u => typecheck e2,
+    unify e1 u,
+    \case getPiType e1 \with {
+      | just (i :: as, e, s) => do {
+        unify (varType i) EInterval,
+        return e1
+      }
+      | _ => throw (ErrNotPi e1)
+    }
   }
-  -- TODO represent the applied path result type.
   | EPathAt e1 e2 => do {
-    typecheck e1,
-    typecheck e2,
-    return EGoal
+    \lam tp => typecheck e1,
+    \lam ti => typecheck e2,
+    unify ti EInterval,
+    \case getPiType tp \with {
+      | just (params, cod, s) => normalize (spineResult params cod s (e2 :: nil))
+      | nothing => throw (ErrNotPi tp)
+    }
   }
+  | EArrayType len e => do {
+    \lam tl => typecheck len,
+    unify tl ETInt,
+    \lam tf => typecheck e,
+    \case getPiType tf \with {
+      | just (f :: nil, EUniv s, _) => return (EUniv s) -- FUTURE: unify f with (Fin len)
+      | _ => throw (ErrNotPi tf)
+    }
+  }
+  | EInterval => return (EUniv (hType level0))
   | ECase isSFunc params retType returnLevel m args => do {
     forEachIndexM args.len (\lam i => do {
       \lam ti => typecheck (args i),
@@ -224,8 +235,9 @@
     forEachIndexM args.len (\lam i => typecheck (args i)),
     normalize (EFunCall type l args)
   }
-  -- TODO
+  -- TODO resolve type from environment
   | ETypeDestr type e => do {
+    typecheckVar type,
     typecheck e,
     return EGoal
   }

@@ -27,9 +27,11 @@
 
 \type LevelSubst => Array (\Sigma LevelVar Level)
 
-\func Prop => \new Sort { | lp => LMax nothing 0 0 | lh => LMax nothing 0 -1}
-\func Set (l : Level) => \new Sort { | lp => l | lh => LMax nothing 0 0}
-\func Set0 : Sort => \new Sort { | lp => LMax nothing 0 0 | lh => LMax nothing 0 0 }
+\func level0 => LMax nothing 0 0
+\func Prop => \new Sort { | lp => level0 | lh => LMax nothing 0 -1}
+\func Set (l : Level) => \new Sort { | lp => l | lh => level0}
+\func hType (l : Level) => \new Sort { | lp => l | lh => LInfinity}
+\func Set0 : Sort => Set level0
 \func stdLevel => \new Sort { | lp => LMax (just LP) 0 0 | lh => LMax (just LH) 0 0}
 
 \func succLevel (l : Level) : Level \elim l
