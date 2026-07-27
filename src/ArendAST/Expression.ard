@@ -47,7 +47,8 @@
   | EConsCall Var LevelArgs (typeArgs : Array Expr) (consArgs : Array Expr)
   | EDataCall Var LevelArgs (Array Expr)
   | EFieldCall Var Expr
-  | EClassCall Var LevelArgs (implementations : Nat -> Expr) Sort Var -- cannot be impls:Var->Expr (positivity)
+  | EClassCall Var LevelArgs (implementations : Array Var) Sort Var
+  -- a Var in implementations is always global, refers to the name of the field, and always carries an evaluation
 
   -- Records
   | ENew (parent : MaybeExpr) Expr

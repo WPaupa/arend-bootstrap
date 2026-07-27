@@ -3,7 +3,7 @@
 \import Data.Bool
 \import Data.Maybe
 
-\data Def : \Set0
+\data Definition : \Set0
   | DFunc FuncDef
   | DData DataDef
   | DClass ClassDef
@@ -25,3 +25,17 @@
 
 \record ConsDef
   (name : String) (id : Nat) (datatype : Nat) (params : Array Var) (patterns : Maybe (Array Pattern)) (intervalmatch : Maybe Match)
+
+\func getName (_ : Definition) : String
+  | DFunc f => f.name
+  | DData d => d.name
+  | DClass c => c.name
+  | DField f => f.name
+  | DCons c => c.name
+
+\func getId (_ : Definition) : Nat
+  | DFunc f => f.id
+  | DData d => d.id
+  | DClass c => c.id
+  | DField f => f.id
+  | DCons c => c.id

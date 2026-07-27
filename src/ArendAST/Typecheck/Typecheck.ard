@@ -136,7 +136,7 @@
       normalize (spineResult params cod s (e :: nil))
     }
   }
-  -- implementations are an opaque Nat -> Expr, TODO traverse them
+  -- TODO traverse implementations
   | EClassCall v l implementations s v1 => return (EUniv s)
   | ENew parent e => do {
     typecheckMaybe parent,
