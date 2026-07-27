@@ -1,9 +1,20 @@
 \import ArendAST.Expression
+\import ArendAST.Reduction.CompClosure
 \import Data.Array
+\import Data.Bool
+\import Function.Meta
+\import Utilities.Monad
+\import Monad.Do
+\import Data.Maybe
+\import ArendAST.Typecheck.Error
+\import ArendAST.Typecheck.Unify
+\import Utilities.Monad.Reader
 
-\func substitute (e : Expr) (v : Var) (e' : Expr) : Expr => {?}
-
-\func normalize (e : Expr) : Expr => {?}
+\func substitute (e : Expr) (v : Var) (e' : Expr) : Expr => compClosure step e \where {
+  \func step (e : Expr) : Expr \elim e
+    | EVar v1 => if (eqVar v1 v) e' (EVar v1)
+    | t => t
+}
 
 \func substVArray (vs : Array Var) (v : Var) (e : Expr) : Array Var =>
   map (\case __ \with {
@@ -13,8 +24,65 @@
         (MaybeExpr.map (\lam x => substitute x v e) VEvaluation)
   }) vs
 
-\func normVArray (vs : Array Var) : Array Var =>
-  map (\case __ \with {
-    | GlobalVar VName VId VType VEvaluation => GlobalVar VName VId (normalize VType) (MaybeExpr.map normalize VEvaluation)
-    | LocalVar VName index VType VEvaluation => LocalVar VName index (normalize VType) (MaybeExpr.map normalize VEvaluation)
+\func beta (e : Expr) : Expr => compClosure step e \where {
+  \func step (e : Expr) : Expr \elim e
+    | EApp (ELam (h :: nil) e s) e' isExplicit => substitute e h e'
+    | EApp (ELam (h :: hs) e s) e' isExplicit => ELam hs (substitute e h e') s
+    | t => t
+}
+
+\func boxred (e : Expr) : Expr => compClosure step e \where {
+  \func step (e : Expr) : Expr \elim e
+    | EPEval (EBox v t) => ETyped v t
+    | t => t
+}
+
+\func delta (e : Expr) : Expr => compClosure step e \where {
+  \func step (e : Expr) : Expr \elim e
+    | EVar (LocalVar _ _ _ (justE e)) => e
+    | EVar (GlobalVar _ _ _ (justE e)) => e
+    | t => t
+}
+
+\func zeta (e : Expr) : Expr => compClosure step e \where {
+  \func step (e : Expr) : Expr \elim e
+--  | ELet s cs in => {?}
+    | t => t
+}
+
+\func normalize (e : Expr) : Env Expr => \case normalizeWithFuel e (getFuel e) \with {
+  | nothing => throw ErrOutOfFuel
+  | just a => return a
+} \where {
+  \func reduce (reductions : Array (Expr -> Expr)) (e : Expr) : Maybe Expr \elim reductions
+    | nil => nothing
+    | a :: l => \case eqExpr (a e) e \with {
+      | true => reduce l e
+      | false => just $ a e
+    }
+  \func reductions => beta :: boxred :: delta :: nil
+  \func normalizeWithFuel (e : Expr) (fuel : Nat) : Maybe Expr \elim fuel
+    | 0 => nothing
+    | suc fuel => \case reduce reductions e \with {
+      | nothing => just e
+      | just a => normalizeWithFuel a fuel
+    }
+  \func getFuel (_ : Expr) : Nat
+    | ELam _ e _ => getFuel e Nat.* 2
+    | EApp e1 e2 s => getFuel e1 Nat.+ getFuel e2
+    | _ => 1000
+}
+
+\func normVArray (vs : Array Var) : Env (Array Var) =>
+  mapM (\case __ \with {
+    | GlobalVar VName VId VType VEvaluation => do {
+      \lam vt => normalize VType,
+      \lam ve => MaybeExpr.mapM normalize VEvaluation,
+      return $ GlobalVar VName VId vt ve
+    }
+    | LocalVar VName index VType VEvaluation => do {
+      \lam vt => normalize VType,
+      \lam ve => MaybeExpr.mapM normalize VEvaluation,
+      return $ LocalVar VName index vt ve
+    }
   }) vs

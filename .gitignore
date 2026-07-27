@@ -1,7 +1,7 @@
 .idea
 bin
 *.iml
-Arend.jar
+*.jar
 .sig
 .gradle
 gradle

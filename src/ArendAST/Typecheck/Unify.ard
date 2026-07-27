@@ -1,4 +1,5 @@
 \import ArendAST.Expression
+\import ArendAST.Typecheck.Env
 \import ArendAST.Typecheck.Error
 \import Paths.Meta
 \import Set
@@ -11,17 +12,20 @@
 
 \func errUni : Env (\Sigma) => throw ErrUnify
 
-\func unifyVar (v1 v2 : Var) : Env (\Sigma)
-  | LocalVar _ i _ _, LocalVar _ j _ _ => \case i ==_B j \with {
-    | false => errUni
-    | true => return ()
-  }
-  | GlobalVar _ i _ _, GlobalVar _ j _ _ => \case i ==_B j \with {
-    | false => errUni
-    | true => return ()
-  }
-  | _, _ => errUni
+\func eqVar (_ _ : Var) : Bool
+  | LocalVar _ i _ _, LocalVar _ j _ _ => i ==_B j
+  | GlobalVar _ i _ _, GlobalVar _ j _ _ => i ==_B j
+  | _, _ => false
 
+\func eqExpr (e1 e2 : Expr) : Bool => \case (unify e1 e2).runReaderT emptyEnv \with {
+  | ok a => true
+  | err c => false
+}
+
+\func unifyVar (v1 v2 : Var) : Env (\Sigma) => \case eqVar v1 v2 \with {
+  | false => errUni
+  | true => return ()
+}
 
 \func mapM2 {A : \Type} (f : A -> A -> Env (\Sigma)) (v1 v2 : Array A) : Env (\Sigma) \elim v1, v2
   | nil, nil => return ()

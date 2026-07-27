@@ -38,11 +38,13 @@
       | just (nil, _, _) => throw (ErrNotPi te1)
       | just (v :: nil, e, _) => do {
         unify te2 (varType v),
-        return (normalize (substitute e v e2))
+        normalize (substitute e v e2)
       }
       | just (v :: vs, e, s) => do {
         unify te2 (varType v),
-        return (EPiType (normVArray (substVArray vs v e2)) (normalize (substitute e v e2)) s)
+        \lam vns => normVArray (substVArray vs v e2),
+        \lam en  => normalize (substitute e v e2),
+        return (EPiType vns en s)
       }
     }
   }
@@ -95,7 +97,7 @@
         \lam ti => typecheck (a i),
         unify ti (expectedArgType params a i)
       }),
-      return (normalize (spineResult params cod s a))
+      normalize (spineResult params cod s a)
     }
   }
   | EConsCall v l typeArgs consArgs => \case getPiType (varType v) \with {
@@ -109,7 +111,7 @@
         \lam ti => typecheck (consArgs i),
         unify ti (expectedArgType params (typeArgs ++ consArgs) (typeArgs.len Nat.+ i))
       }),
-      return (normalize (spineResult params cod s (typeArgs ++ consArgs)))
+      normalize (spineResult params cod s (typeArgs ++ consArgs))
     }
   }
   | EDataCall v l a => \case getPiType (varType v) \with {
@@ -122,7 +124,7 @@
         \lam ti => typecheck (a i),
         unify ti (expectedArgType params a i)
       }),
-      return (normalize (spineResult params cod s a))
+      normalize (spineResult params cod s a)
     }
   }
   -- the field's type is a Pi over "this", so we apply it to e
@@ -131,7 +133,7 @@
     | just (params, cod, s) => do {
       \lam te => typecheck e,
       unify te (expectedArgType params (e :: nil) 0),
-      return (normalize (spineResult params cod s (e :: nil)))
+      normalize (spineResult params cod s (e :: nil))
     }
   }
   -- implementations are an opaque Nat -> Expr, TODO traverse them
@@ -139,7 +141,7 @@
   | ENew parent e => do {
     typecheckMaybe parent,
     typecheck e,
-    return (normalize e)
+    normalize e
   }
   -- Array type itself is not representable in this AST, TODO fix
   -- for now we return a goal placeholder for the result type.
@@ -172,7 +174,7 @@
     }),
     forEachIndexM params.len (\lam i => localT (extendArray (take i params (linarith (fin_< i)))) (typecheckVar (params i))),
     localT (extendArray params) (typecheck retType),
-    return (normalize (substParams params retType args))
+    normalize (substParams params retType args)
   }
   | ELet isSFunc clauses e => do {
     forEachIndexM clauses.len (\lam i => typecheckLetClause (clauses i)),
@@ -182,12 +184,12 @@
   | ETyped e t => do {
     \lam te => typecheck e,
     unify te t,
-    return (normalize t)
+    normalize t
   }
   | EBox e t => do {
     \lam te => typecheck e,
     unify te t,
-    return (normalize t)
+    normalize t
   }
   | EPEval e => typecheck e
   | EUniv s => \case s.lp \with {
@@ -206,7 +208,7 @@
   | EType type l clauseNo args underlying => do {
     typecheck underlying,
     forEachIndexM args.len (\lam i => typecheck (args i)),
-    return (normalize (EFunCall type l args))
+    normalize (EFunCall type l args)
   }
   -- TODO
   | ETypeDestr type e => do {

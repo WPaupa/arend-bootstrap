@@ -1,0 +1,70 @@
+\import ArendAST.Expression
+\import ArendAST.Typecheck.Unify
+\import Data.Array
+\import Data.Bool
+\import Function.Meta
+
+\func closureMaybe (f : Expr -> Expr) (e : MaybeExpr) : MaybeExpr \elim e
+  | nothingE => nothingE
+  | justE e => justE $ f (closure f e)
+
+\func closureVar (f : Expr -> Expr) (e : Var) : Var \elim e
+  | GlobalVar VName VId VType VEvaluation => GlobalVar VName VId (f (closure f VType)) (closureMaybe f VEvaluation)
+  | LocalVar VName index VType VEvaluation => LocalVar VName index (f (closure f VType)) (closureMaybe f VEvaluation)
+
+\func closurePattern (f : Expr -> Expr) (e : Pattern) : Pattern \elim e
+  | PVar v1 => PVar (closureVar f v1)
+  | PConstr v1 a => PConstr (closureVar f v1) (mkArray (\lam i => closurePattern f (a i)))
+  | PAbsurd => PAbsurd
+
+\func closureClause (f : Expr -> Expr) (e : Clause) : Clause \elim e
+  | cClause pats body => cClause (mkArray (\lam i => closurePattern f (pats i))) (closureMaybe f body)
+
+\func closureMatch (f : Expr -> Expr) (e : Match) : Match \elim e
+  | NoMatch e => NoMatch $ f (closure f e)
+  | DoMatch a => DoMatch (mkArray (\lam i => closureClause f (a i)))
+  | IntervalMatch nparams a fallback =>
+    IntervalMatch nparams (mkArray (\lam i => (closureMaybe f (a i).1, closureMaybe f (a i).2))) (closureMaybeMatch f fallback)
+
+\func closureMaybeMatch (f : Expr -> Expr) (e : MaybeMatch) : MaybeMatch \elim e
+  | justM m => justM $ closureMatch f m
+  | nothingM => nothingM
+
+\func closureLetClause (f : Expr -> Expr) (e : LetClause) : LetClause \elim e
+  | cLetClause name body type isSFunc => cLetClause name (f (closure f body)) (closureMaybe f type) isSFunc
+
+\func closure (f : Expr -> Expr) (e : Expr) : Expr \elim e
+  | EVar v1 => EVar $ closureVar f v1
+  | EApp e1 e2 isExplicit => EApp (f (closure f e1)) (f (closure f e2)) isExplicit
+  | ELam a e resultSort => ELam (mkArray (\lam i => closureVar f (a i))) (f (closure f e)) resultSort
+  | ETuple elements e => ETuple (mkArray (\lam i => closure f (elements i))) (f (closure f e))
+  | EProj e n isProperty => EProj (f (closure f e)) n isProperty
+  | EFunCall v1 l a => EFunCall (closureVar f v1) l (mkArray (\lam i => closure f (a i)))
+  | EConsCall v1 l typeArgs consArgs => EConsCall (closureVar f v1) l
+      (mkArray (\lam i => closure f (typeArgs i))) (mkArray (\lam i => closure f (consArgs i)))
+  | EDataCall v1 l a => EDataCall (closureVar f v1) l (mkArray (\lam i => closure f (a i)))
+  | EFieldCall v1 e => EFieldCall (closureVar f v1) (f (closure f e))
+  | EClassCall v1 l implementations s v2 => EClassCall (closureVar f v1) l implementations s (closureVar f v2) -- TODO
+  | ENew parent e => ENew (closureMaybe f parent) (f (closure f e))
+  | EArray l e elems tail => EArray l (f (closure f e)) (mkArray (\lam i => closure f (elems i))) (closureMaybe f tail)
+  | EPath l e1 e2 => EPath l (f (closure f e1)) (f (closure f e2))
+  | EPathAt e1 e2 => EPathAt (f (closure f e1)) (f (closure f e2))
+  | ECase isSFunc a e returnLevel m args => ECase isSFunc (mkArray (\lam i => closureVar f (a i)))
+      (f (closure f e)) returnLevel (closureMatch f m) (mkArray (\lam i => closure f (args i)))
+  | ELet isSFunc a e => ELet isSFunc (mkArray (\lam i => closureLetClause f (a i))) (f (closure f e))
+  | ETyped e e1 => ETyped (f (closure f e)) (f (closure f e1))
+  | EBox e e1 => EBox (f (closure f e)) (f (closure f e1))
+  | EPEval e => EPEval (f (closure f e))
+  | EPiType a e s => EPiType (mkArray (\lam i => closureVar f (a i))) (f (closure f e)) s
+  | ESigmaType a s => ESigmaType (mkArray (\lam i => closureVar f (a i))) s
+  | EType type l clauseNo args e => EType (closureVar f type) l clauseNo (\lam i => closure f (args i)) (f (closure f e))
+  | ETypeDestr type e => ETypeDestr (closureVar f type) (f (closure f e))
+  | EError m => EError (closureMaybe f m)
+  | ETInt => ETInt
+  | ETString => ETString
+  | EUniv s => EUniv s
+  | EGoal => EGoal
+  | EInt i => EInt i
+  | EString s => EString s
+
+\func compClosure (f : Expr -> Expr) (e : Expr) : Expr => f (closure f e)

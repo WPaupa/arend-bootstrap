@@ -1,0 +1,27 @@
+\import ArendAST.Expression
+\import ArendAST.Quote
+\import ArendAST.Typecheck.Typecheck
+\import ArendAST.Typecheck.Env
+\import Arith.Nat
+\import Data.Array
+\import Data.List (List)
+\import Debug.Meta
+\import Meta
+\import Utilities.Monad.Reader
+\import ArendAST.Level
+\import Data.Maybe
+\import Paths
+\import ArendAST.Typecheck.Error
+\import ArendAST.Reduction.Normalize
+
+\func beta_test => quot { \lam (A : \Set0) (c : A) => (\lam (x : A) (y : A) => x) c }
+
+\func getExp (_ : Expr) : \Sigma (List Var) Expr
+  | ELam _ (ELam y e _) _ => (toList y, e)
+  | _ => (Data.List.nil, EGoal)
+\func beta_p => println (getExp (beta beta_test))
+\func beta0_p => println (Maybe.map getExp (normalize.reduce normalize.reductions beta_test))
+\func beta1_p => println (Maybe.map getExp (normalize.normalizeWithFuel beta_test 2))
+\func beta2_p => println (Maybe.map getExp (normalize.normalizeWithFuel beta_test 6000))
+\func betaF_p => println (normalize.getFuel beta_test)
+\func beta_norm_p => println ((normalize beta_test).runReaderT emptyEnv)

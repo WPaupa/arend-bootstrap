@@ -18,6 +18,7 @@
   | ErrNonAbsurd
   | ErrLevelParamNotAllowed LevelVar
   | ErrUnify
+  | ErrOutOfFuel
 
 \data Result (A : \Type)
   | ok A
