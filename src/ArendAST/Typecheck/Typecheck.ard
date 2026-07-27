@@ -74,10 +74,9 @@
     \lam te => typecheck e,
     \case getSigmaType te \with {
       | nothing => throw (ErrNotSigma te)
-      | just a => \case nat_<=-dec.nat_<=_Bool (suc n) a.len \as x, idp : nat_<=-dec.nat_<=_Bool (suc n) a.len = x \with {
-        | true, p => return (varType (nth n a (nat_<-dec {n} {a.len} {So.toSo p})))
-        -- TODO this feels wrong, what if the varType has some variables bound earlier in the sigma-type
-        | false, _ => throw (ErrArity a.len n)
+      | just a => \case nat_<=-dec.nat_<=_Bool (suc n) a.len \with {
+        | true => return (projComponentType a (justE e) 0 n)
+        | false => throw (ErrArity a.len n)
       }
     }
   }
@@ -235,11 +234,19 @@
     forEachIndexM args.len (\lam i => typecheck (args i)),
     normalize (EFunCall type l args)
   }
-  -- TODO resolve type from environment
   | ETypeDestr type e => do {
-    typecheckVar type,
-    typecheck e,
-    return EGoal
+    \lam env => askT,
+    \lam te => typecheck e,
+    \case getDef env (getVarId type) \with {
+      | just (DFunc f) => \case te \with {
+        | EFunCall _ _ args => \case f.body \with {
+          | just (NoMatch underlying) => normalize (substParams f.params underlying args)
+          | _ => return EGoal
+        }
+        | _ => throw ErrUnknownType
+      }
+      | _ => throw (ErrUnbound type)
+    }
   }
   | EError (justE t) => fmapM (\lam e => EError (justE e)) (typecheck t)
   | EError nothingE => return (EError nothingE)
