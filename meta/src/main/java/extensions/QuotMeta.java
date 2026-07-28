@@ -80,6 +80,8 @@ public class QuotMeta implements MetaResolver {
   static final int ECASE = 15;
   static final int ETINT = 16;
   static final int ETSTRING = 17;
+  static final int ENAT = 18;
+  static final int ETNAT = 19;
   // List encoding markers (kept distinct from node tags). A list is a cons/nil chain rather than a
   // single tuple, because a one-element tuple `(x)` collapses to `x` in Arend concrete syntax.
   static final int NIL = 100;
@@ -271,6 +273,14 @@ public class QuotMeta implements MetaResolver {
     // type from an enclosing `(e : ascribed)`; nodes with a type/sort slot absorb it, others wrap in
     // ETyped (see `ascribe`).
     private @Nullable ConcreteExpression enc(ConcreteExpression e, Ctx ctx, @Nullable ConcreteExpression ascribed) {
+      // An `Int` literal is written with the `pos` / `neg` constructor (`pos 3`, `neg 5`); a bare
+      // number literal is a `Nat` (see the ConcreteNumberExpression case), so `pos`/`neg` is how the
+      // two are told apart at parse time.
+      ConcreteExpression intLit = intLiteral(e);
+      if (intLit != null) {
+        return ascribe(intLit, ctx, ascribed);
+      }
+
       // Application `f a_1 ... a_n` (at resolve time this is an unresolved sequence, not a
       // ConcreteAppExpression, so use the uniform argument-sequence accessor).
       List<? extends ConcreteArgument> seq = e.getArgumentsSequence();
@@ -295,6 +305,9 @@ public class QuotMeta implements MetaResolver {
         // them), so a bare `Int` / `String` reference reifies directly.
         if (name.equals("Int")) {
           return ascribe(factory.tuple(List.of(tag(ETINT), tag(0))), ctx, ascribed);
+        }
+        if (name.equals("Nat")) {
+          return ascribe(factory.tuple(List.of(tag(ETNAT), tag(0))), ctx, ascribed);
         }
         if (name.equals("String")) {
           return ascribe(factory.tuple(List.of(tag(ETSTRING), tag(0))), ctx, ascribed);
@@ -324,7 +337,11 @@ public class QuotMeta implements MetaResolver {
       }
 
       if (e instanceof ConcreteNumberExpression n) {
-        return ascribe(factory.tuple(List.of(tag(EINT), factory.number(n.getNumber()))), ctx, ascribed);
+        // A bare number literal is a `Nat` (ENat); a negative one has no Nat form, so it falls back
+        // to `Int` (an explicit `Int` is written `pos`/`neg`, see intLiteral).
+        java.math.BigInteger v = n.getNumber();
+        int numTag = v.signum() < 0 ? EINT : ENAT;
+        return ascribe(factory.tuple(List.of(tag(numTag), factory.number(v))), ctx, ascribed);
       }
 
       if (e instanceof ConcreteStringExpression s) {
@@ -422,6 +439,29 @@ public class QuotMeta implements MetaResolver {
 
       // Goals, holes, and everything else without a readable accessor.
       return ascribe(tag(EGOAL), ctx, ascribed);
+    }
+
+    // An explicit `Int` literal: `pos <num>` or `neg <num>` (the two `Int` constructors), encoded as
+    // EInt with the signed value. Returns null if `e` is not such an application.
+    private @Nullable ConcreteExpression intLiteral(ConcreteExpression e) {
+      List<? extends ConcreteArgument> seq = e.getArgumentsSequence();
+      if (seq.size() != 2 || !(seq.get(0).getExpression() instanceof ConcreteReferenceExpression head)) {
+        return null;
+      }
+      String name = head.getReferent().getRefName();
+      boolean neg;
+      if (name.equals("pos")) {
+        neg = false;
+      } else if (name.equals("neg")) {
+        neg = true;
+      } else {
+        return null;
+      }
+      if (!(seq.get(1).getExpression() instanceof ConcreteNumberExpression num)) {
+        return null;
+      }
+      java.math.BigInteger v = num.getNumber();
+      return factory.tuple(List.of(tag(EINT), factory.number(neg ? v.negate() : v)));
     }
 
     // MaybeExpr: nothing (null) -> a bare marker; just -> (JUST, enc).

@@ -27,7 +27,7 @@
 }
 
 \func combK : Expr => quot { (
-  (\lam (A : \Type 5 7) (x : A) (y : A) => x),
+  (\lam (A : \Type 5 7) (x : A) (_ : A) => x),
   (x$0 : \Prop)
 ) : \Sigma (u : \Pi (A : \Type 0 0) (x : A) (y : A) -> A) (v : \oo-Type 0)}
 
@@ -40,7 +40,7 @@
 \func typecheckStr_p => println
   ((typecheck str).runReaderT emptyEnv)
 
-\func useData : Expr => quot { \lam (x : (D$100 : \Set0)) => \case x \as u \return Int \with { | C$101 (y : Int) => y | E$102 => 0 } }
+\func useData : Expr => quot { \lam (x : (D$100 : \Set0)) => \case x \as u \return Int \with { | C$101 (y : Int) => y | E$102 => pos 1 } }
 \func useData_p => println useData
 \func typecheckData_p => println ((typecheck useData).runReaderT
     (extend (GlobalVar "D" 100 (EUniv Set0) nothingE)
@@ -54,7 +54,7 @@
           (\new ConsDef "C" 101 100 (LocalVar "y" 3 ETInt nothingE :: nil) nothing nothing) ::
           (\new ConsDef "E" 103 100 nil nothing nothing) :: nil
         ) nothing false)) emptyEnv)))
-\func useData_wrong : Expr => quot { \lam (x : (D$100 : \Set0)) => \case x \as u \return String \with { | C$101 (y : Int) => y | E$102 => 0 } }
+\func useData_wrong : Expr => quot { \lam (x : (D$100 : \Set0)) => \case x \as u \return String \with { | C$101 (y : Int) => y | E$102 => pos 1 } }
 \func typecheckData_wrong_p => println ((typecheck useData_wrong).runReaderT
     (extend (GlobalVar "D" 100 (EUniv Set0) nothingE)
         (extendDef (DData (\new DataDef "D" 100 nil Set0 (
