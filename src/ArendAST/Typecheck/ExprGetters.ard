@@ -157,6 +157,35 @@
   | nil     => nothing
   | c :: cs => if (c.id ==_B cid) (just c) (consById cs cid)
 
+\func fieldById (fs : Array FieldDef) (fid : Nat) : Maybe FieldDef \elim fs
+  | nil     => nothing
+  | f :: fs => if (f.id ==_B fid) (just f) (fieldById fs fid)
+
+\func hasVarId (vs : Array Var) (fid : Nat) : Bool \elim vs
+  | nil     => false
+  | v :: vs => (getVarId v ==_B fid) or hasVarId vs fid
+
+
+\func checkFieldsBelong (cls : ClassDef) (impls : Array Var) : Env (\Sigma) =>
+  forEachIndexM impls.len (\lam i => \case fieldById cls.fields (getVarId (impls i)) \with {
+    | just _  => return ()
+    | nothing => throw (ErrNotAField (impls i))
+  })
+
+\func checkNoDupFields (impls : Array Var) : Env (\Sigma) \elim impls
+  | nil     => return ()
+  | v :: vs => \case hasVarId vs (getVarId v) \with {
+    | true  => throw (ErrFieldDuplicate v)
+    | false => checkNoDupFields vs
+  }
+
+-- FUTURE: walk through supers (with some fuel)
+\func checkCoverage (cls : ClassDef) (impls : Array Var) : Env (\Sigma) =>
+  forEachIndexM cls.fields.len (\lam i => \case hasVarId impls (cls.fields i).id \with {
+    | true  => return ()
+    | false => throw (ErrFieldMissing (cls.fields i).id)
+  })
+
 \func patternToExpr (p : Pattern) : Expr \elim p
   | PVar v            => EVar v
   | PConstr cv subpats => EConsCall cv LArgEmpty nil (mkArray (\lam i => patternToExpr (subpats i)))

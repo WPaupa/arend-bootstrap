@@ -143,13 +143,28 @@
     }
   }
   | EClassCall v l implementations s v1 => do {
+    \lam env => askT,
     forEachIndexM implementations.len (\lam i => typecheckVar (implementations i)),
-    return (EUniv s)
+    \case getDef env (getVarId v) \with {
+      | just (DClass cls) => do {
+        checkFieldsBelong cls implementations,
+        checkNoDupFields implementations,
+        return (EUniv s)
+      }
+      | _ => throw (ErrUnbound v)
+    }
   }
   | ENew parent e => do {
     typecheckMaybe parent,
     typecheck e,
-    normalize e
+    \lam env => askT,
+    \case parent, e \with {
+      | nothingE, EClassCall v l implementations s v1 => \case getDef env (getVarId v) \with {
+        | just (DClass cls) => checkCoverage cls implementations >> normalize e
+        | _ => throw (ErrUnbound v)
+      }
+      | _, _ => normalize e
+    }
   }
   | EArray l e elems tail => do {
     typecheck e,

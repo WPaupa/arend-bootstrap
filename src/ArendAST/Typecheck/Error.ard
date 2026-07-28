@@ -18,6 +18,9 @@
   | ErrUnify
   | ErrOutOfFuel
   | ErrIntervalMatch
+  | ErrNotAField Var                    -- an implemented field does not belong to the class
+  | ErrFieldDuplicate Var               -- a field is implemented more than once
+  | ErrFieldMissing Nat                 -- a required field id is not implemented
 
 \data Result (A : \Type)
   | ok A
