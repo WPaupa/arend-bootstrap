@@ -1,15 +1,30 @@
+\import ArendAST.Definition
 \import ArendAST.Expression
 \import ArendAST.Quote
+\import ArendAST.Reduction.CompClosure
 \import ArendAST.Typecheck.Typecheck
 \import ArendAST.Typecheck.Env
 \import Arith.Nat
+\import Data.Bool
 \import Debug.Meta
 \import Meta
+\import Utilities.Arith
 \import Utilities.Monad.Reader
 \import ArendAST.Level
 \import Data.Maybe
 \import Paths
 \import ArendAST.Typecheck.Error
+
+\func typeAs (i : Nat) (t : Expr) (e : Expr) => compClosure step e \where {
+  \func step (_ : Expr) : Expr
+    | EVar (LocalVar name index type eval) => if (index ==_B i)
+        (EVar (LocalVar name index t eval))
+        (EVar (LocalVar name index type eval))
+    | EVar (GlobalVar name index type eval) => if (index ==_B i)
+        (EVar (GlobalVar name index t eval))
+        (EVar (GlobalVar name index type eval))
+    | t => t
+}
 
 \func combK : Expr => quot { (
   (\lam (A : \Type 5 7) (x : A) (y : A) => x),
@@ -24,3 +39,18 @@
 
 \func typecheckStr_p => println
   ((typecheck str).runReaderT emptyEnv)
+
+\func useData : Expr => quot { \lam (x : (D$100 : \Set0)) => \case x \as u \return Int \with { | C$101 (y : Int) => y | E$102 => 0 } }
+\func useData_p => println useData
+\func typecheckData_p => println ((typecheck useData).runReaderT
+    (extend (GlobalVar "D" 100 (EUniv Set0) nothingE)
+    (extendDef (DData (\new DataDef "D" 100 nil Set0 (
+      (\new ConsDef "C" 101 100 (LocalVar "y" 3 ETInt nothingE :: nil) nothing nothing) ::
+      (\new ConsDef "E" 102 100 nil nothing nothing) :: nil
+                                                     ) nothing false)) emptyEnv)))
+\func typecheckDataWrong_p => println ((typecheck useData).runReaderT
+    (extend (GlobalVar "D" 100 (EUniv Set0) nothingE)
+        (extendDef (DData (\new DataDef "D" 100 nil Set0 (
+          (\new ConsDef "C" 101 100 (LocalVar "y" 3 ETInt nothingE :: nil) nothing nothing) ::
+          (\new ConsDef "E" 103 100 nil nothing nothing) :: nil
+        ) nothing false)) emptyEnv)))

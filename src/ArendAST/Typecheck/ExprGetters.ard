@@ -128,3 +128,23 @@
   | nil, _              => body
   | _, nil              => body
   | v :: params, a :: args => substParams params (substitute body v a) args
+
+\func getCallId (_ : Expr) : Maybe Nat
+  | EVar v               => just (getVarId v)
+  | EFunCall v _ _       => just (getVarId v)
+  | EConsCall v _ _ _    => just (getVarId v)
+  | EDataCall v _ _      => just (getVarId v)
+  | EFieldCall v _       => just (getVarId v)
+  | EClassCall v _ _ _ _ => just (getVarId v)
+  | EType v _ _ _ _      => just (getVarId v)
+  | ETypeDestr v _       => just (getVarId v)
+  | _                    => nothing
+
+\func getCallDef (env : CheckEnv) (e : Expr) : Maybe Definition => \case getCallId e \with {
+  | nothing => nothing
+  | just id => getDef env id
+}
+
+\func consById (cs : Array ConsDef) (cid : Nat) : Maybe ConsDef \elim cs
+  | nil     => nothing
+  | c :: cs => if (c.id ==_B cid) (just c) (consById cs cid)

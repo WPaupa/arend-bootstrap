@@ -198,6 +198,7 @@
     }),
     forEachIndexM params.len (\lam i => localT (extendArray (take i params (linarith (fin_< i)))) (typecheckVar (params i))),
     localT (extendArray params) (typecheck retType),
+    checkMatch m params,
     normalize (substParams params retType args)
   }
   | ELet isSFunc clauses e => do {
@@ -287,3 +288,30 @@
 
 \func typecheckLetClause (c : LetClause) : Env (\Sigma) \elim c
   | cLetClause name body type _ => typecheck body >> typecheckMaybe type
+
+\func checkPattern (pat : Pattern) (ty : Expr) : Env (\Sigma) \elim pat
+  | PVar _ => return ()
+  | PAbsurd => return ()
+  | PConstr cv subpats => do {
+    \lam env => askT,
+    \case getCallDef env ty \with {
+      | just (DData d) => \case consById d.constrs (getVarId cv) \with {
+        | nothing => throw ErrBadPattern
+        | just c => \case decEqNat subpats.len c.params.len \with {
+          | no _   => throw (ErrArity c.params.len subpats.len)
+          | yes eq => forEachIndexM subpats.len (\lam k => checkPattern (subpats k) (varType (c.params (rewriteI eq k))))
+        }
+      }
+      | _ => throw ErrBadPattern
+    }
+  }
+
+\func checkClause (c : Clause) (params : Array Var) : Env (\Sigma) \elim c
+  | cClause pats body => \case decEqNat pats.len params.len \with {
+    | no _   => throw (ErrArity params.len pats.len)
+    | yes eq => forEachIndexM pats.len (\lam i => checkPattern (pats i) (varType (params (rewriteI eq i))))
+  }
+
+\func checkMatch (m : Match) (params : Array Var) : Env (\Sigma) \elim m
+  | DoMatch clauses => forEachIndexM clauses.len (\lam i => checkClause (clauses i) params)
+  | _               => return ()
