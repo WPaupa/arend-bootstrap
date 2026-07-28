@@ -41,6 +41,8 @@ public class QuotBuild extends BaseMetaDefinition {
   @Dependency ArendRef EBox;
   @Dependency ArendRef ELet;
   @Dependency ArendRef ECase;
+  @Dependency ArendRef ETInt;
+  @Dependency ArendRef ETString;
   // Var constructors
   @Dependency ArendRef GlobalVar;
   @Dependency ArendRef LocalVar;
@@ -187,6 +189,12 @@ public class QuotBuild extends BaseMetaDefinition {
           // (isSFunc, params, returnType, returnLevel, match, args)
           return con(ECase, factory.ref(intOf(fs.get(1)) == 1 ? trueRef : falseRef), decTele(fs.get(2)),
               dec(fs.get(3)), decMaybe(fs.get(4)), decMatch(fs.get(5)), decList(fs.get(6)));
+        }
+        case QuotMeta.ETINT -> {
+          return con(ETInt);
+        }
+        case QuotMeta.ETSTRING -> {
+          return con(ETString);
         }
         default -> {
           return con(EGoal);

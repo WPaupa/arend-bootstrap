@@ -78,6 +78,8 @@ public class QuotMeta implements MetaResolver {
   static final int EBOX = 13;
   static final int ELET = 14;
   static final int ECASE = 15;
+  static final int ETINT = 16;
+  static final int ETSTRING = 17;
   // List encoding markers (kept distinct from node tags). A list is a cons/nil chain rather than a
   // single tuple, because a one-element tuple `(x)` collapses to `x` in Arend concrete syntax.
   static final int NIL = 100;
@@ -288,6 +290,15 @@ public class QuotMeta implements MetaResolver {
       }
 
       if (e instanceof ConcreteReferenceExpression r) {
+        String name = r.getReferent().getRefName();
+        // The builtin type-formers have dedicated AST nodes (there is no local/global binder for
+        // them), so a bare `Int` / `String` reference reifies directly.
+        if (name.equals("Int")) {
+          return ascribe(factory.tuple(List.of(tag(ETINT), tag(0))), ctx, ascribed);
+        }
+        if (name.equals("String")) {
+          return ascribe(factory.tuple(List.of(tag(ETSTRING), tag(0))), ctx, ascribed);
+        }
         // A variable absorbs the ascribed type (as its VType); otherwise it takes the type recorded
         // for it at its binder, so every occurrence carries the same type.
         ConcreteExpression ascType = null;
@@ -297,7 +308,6 @@ public class QuotMeta implements MetaResolver {
             return null;
           }
         }
-        String name = r.getReferent().getRefName();
         int d = name.lastIndexOf('$');
         if (d >= 0 && isNat(name.substring(d + 1))) {
           ConcreteExpression t = ascType != null ? ascType : tag(EGOAL);
@@ -516,16 +526,20 @@ public class QuotMeta implements MetaResolver {
         String nm = ca.referable != null ? ca.referable.getRefName() : "_";
         int level = cur.size;
         ConcreteExpression vt;
-        if (ca.type == null) {
-          vt = tag(EGOAL);
-        } else {
+        if (ca.type != null) {
           vt = enc(ca.type, cur);
           if (vt == null) {
             return null;
           }
+        } else {
+          // No `\as u : T` ascription: give the binder the scrutinee's type, recovered
+          // syntactically when the scrutinee is a variable whose type we recorded.
+          vt = scrutineeType(ca.expression, ctx);
         }
         paramEncs.add(factory.tuple(List.of(factory.string(nm), factory.number(level), vt)));
-        cur = cur.push(nm, ca.type == null ? null : vt);
+        // Record the type (ascribed or scrutinee-derived) so occurrences of the \as-binder in the
+        // return type carry it; EGOAL means we could not recover one.
+        cur = cur.push(nm, isGoal(vt) ? null : vt);
       }
       ConcreteExpression retType = caseExpr.getResultType() == null ? tag(EGOAL) : enc(caseExpr.getResultType(), cur);
       if (retType == null) {
@@ -549,12 +563,40 @@ public class QuotMeta implements MetaResolver {
           retType, retLevel, match, listChain(argEncs)));
     }
 
+    // Is `e` the EGOAL encoding (a bare EGOAL tag)? Used to tell "no type recovered" apart from a
+    // real type encoding when deciding whether to record a binder's type in the context.
+    private boolean isGoal(ConcreteExpression e) {
+      return e instanceof ConcreteNumberExpression n && n.getNumber().intValueExact() == EGOAL;
+    }
+
+    // The type of a \case scrutinee, recovered syntactically: when the scrutinee is a local variable
+    // whose declared type we recorded in the context, that type; otherwise EGOAL. (A `name$id` global
+    // scrutinee carries no recoverable type here.)
+    private ConcreteExpression scrutineeType(ConcreteExpression scrutinee, Ctx ctx) {
+      if (scrutinee instanceof ConcreteReferenceExpression r) {
+        String name = r.getReferent().getRefName();
+        int d = name.lastIndexOf('$');
+        boolean global = d >= 0 && isNat(name.substring(d + 1));
+        if (!global) {
+          Ctx entry = ctx.find(name);
+          if (entry != null && entry.type != null) {
+            return entry.type;
+          }
+        }
+      }
+      return tag(EGOAL);
+    }
+
     // A case clause: cClause (Array Pattern, MaybeExpr body). Pattern variables bind locals for the body.
     private @Nullable ConcreteExpression encCaseClause(Concrete.FunctionClause fc, Ctx ctx) {
       Ctx[] cur = { ctx };
       List<ConcreteExpression> patEncs = new ArrayList<>();
       for (Concrete.Pattern p : fc.getPatterns()) {
-        patEncs.add(encPattern(p, cur));
+        ConcreteExpression pe = encPattern(p, cur);
+        if (pe == null) {
+          return null;
+        }
+        patEncs.add(pe);
       }
       ConcreteExpression body = encMaybe(fc.getExpression(), cur[0]);
       return body == null ? null : factory.tuple(List.of(listChain(patEncs), body));
@@ -562,7 +604,7 @@ public class QuotMeta implements MetaResolver {
 
     // A case pattern. A `name$id` name-pattern is a nullary constructor; a plain name binds a local.
     // Constructor patterns' arguments bind further locals. Unreadable/unsupported patterns -> PAbsurd.
-    private ConcreteExpression encPattern(Concrete.Pattern pat, Ctx[] cur) {
+    private @Nullable ConcreteExpression encPattern(Concrete.Pattern pat, Ctx[] cur) {
       if (pat instanceof Concrete.NamePattern np) {
         String name = np.getRef() != null ? np.getRef().getRefName() : "_";
         int d = name.lastIndexOf('$');
@@ -570,9 +612,18 @@ public class QuotMeta implements MetaResolver {
           ConcreteExpression v = encVar(true, name.substring(0, d), factory.number(new java.math.BigInteger(name.substring(d + 1))), tag(EGOAL));
           return factory.tuple(List.of(tag(P_CONSTR), v, tag(NIL)));
         }
+        // A pattern binder may carry a type ascription `(y : T)`; encode it (before the binder is in
+        // scope) and record it so every occurrence of `y` in the body shares the same type.
+        ConcreteExpression typeEnc = tag(EGOAL);
+        if (np.type != null) {
+          typeEnc = enc(np.type, cur[0]);
+          if (typeEnc == null) {
+            return null;
+          }
+        }
         int level = cur[0].size;
-        cur[0] = cur[0].push(name, null);
-        return factory.tuple(List.of(tag(P_VAR), encVar(false, name, factory.number(level), tag(EGOAL))));
+        cur[0] = cur[0].push(name, np.type == null ? null : typeEnc);
+        return factory.tuple(List.of(tag(P_VAR), encVar(false, name, factory.number(level), typeEnc)));
       }
       if (pat instanceof Concrete.ConstructorPattern cp) {
         return encConstrPattern(cp.getConstructor(), cp.getPatterns(), cur);
@@ -596,14 +647,18 @@ public class QuotMeta implements MetaResolver {
       return tag(P_ABSURD);
     }
 
-    private ConcreteExpression encConstrPattern(@Nullable ArendRef ctor, List<? extends Concrete.Pattern> argPats, Ctx[] cur) {
+    private @Nullable ConcreteExpression encConstrPattern(@Nullable ArendRef ctor, List<? extends Concrete.Pattern> argPats, Ctx[] cur) {
       String name = ctor != null ? ctor.getRefName() : "_";
       int d = name.lastIndexOf('$');
       String cn = d >= 0 ? name.substring(0, d) : name;
       java.math.BigInteger id = d >= 0 && isNat(name.substring(d + 1)) ? new java.math.BigInteger(name.substring(d + 1)) : java.math.BigInteger.ZERO;
       List<ConcreteExpression> subs = new ArrayList<>();
       for (Concrete.Pattern sp : argPats) {
-        subs.add(encPattern(sp, cur));
+        ConcreteExpression pe = encPattern(sp, cur);
+        if (pe == null) {
+          return null;
+        }
+        subs.add(pe);
       }
       return factory.tuple(List.of(tag(P_CONSTR), encVar(true, cn, factory.number(id), tag(EGOAL)), listChain(subs)));
     }
