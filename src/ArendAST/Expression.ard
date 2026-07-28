@@ -32,6 +32,7 @@
   -- Atoms
   | EVar Var
   | EInt Int
+  | ENat Nat
   | EString String
 
   -- Functions
@@ -74,6 +75,7 @@
   | EPiType (Array Var) Expr Sort
   | ESigmaType (Array Var) Sort
   | ETInt
+  | ETNat
   | ETString
   | EInterval
   | EArrayType (len : Expr) (elemType : Expr)

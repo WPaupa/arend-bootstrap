@@ -110,6 +110,7 @@
   | EGoal, EGoal => return ()
   | ETInt, ETInt => return ()
   | ETString, ETString => return ()
+  | ETNat, ETNat => return ()
   | _, _ => errUni
 
 \func unifyMaybe (_ _ : MaybeExpr) : Env (\Sigma)

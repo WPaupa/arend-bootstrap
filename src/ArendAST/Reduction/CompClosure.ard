@@ -64,10 +64,12 @@
   | ETypeDestr type e => ETypeDestr (closureVar f type) (f (closure f e))
   | EError m => EError (closureMaybe f m)
   | ETInt => ETInt
+  | ETNat => ETNat
   | ETString => ETString
   | EUniv s => EUniv s
   | EGoal => EGoal
   | EInt i => EInt i
+  | ENat n => ENat n
   | EString s => EString s
 
 \func compClosure (f : Expr -> Expr) (e : Expr) : Expr => f (closure f e)

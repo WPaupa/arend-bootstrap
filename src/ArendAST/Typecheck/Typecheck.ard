@@ -30,6 +30,7 @@
     typecheckVar v
   }
   | EInt i => return ETInt
+  | ENat n => return ETNat
   | EString s => return ETString
   | EApp e1 e2 isExplicit => do {
     \lam te1 => typecheck e1,
@@ -170,12 +171,12 @@
     typecheck e,
     forEachIndexM elems.len (\lam i => do {
       \lam ti => typecheck (elems i),
-      \lam eti => normalize (EApp e (EInt (pos i)) true),
+      \lam eti => normalize (EApp e (ENat i) true),
       unify ti eti
     }),
     typecheckMaybe tail,
     -- FUTURE: calculate length of tail
-    return (EArrayType (\case tail \with { | nothingE => EInt (pos elems.len) | justE _ => EGoal }) e)
+    return (EArrayType (\case tail \with { | nothingE => ENat elems.len | justE _ => EGoal }) e)
   }
   | EPath l e1 e2 => do {
     typecheck e1,
@@ -270,6 +271,7 @@
   | EError nothingE => return (EError nothingE)
   | EGoal => return EGoal
   | ETInt => return (EUniv Set0)
+  | ETNat => return (EUniv Set0)
   | ETString => return (EUniv Set0)
 
 
