@@ -1,6 +1,7 @@
 \import Algebra.Meta
 \import Arith.Nat
 \import Data.Array
+\import Data.Bool
 \import Logic
 \import Order.PartialOrder
 \import Order.StrictOrder
@@ -9,3 +10,11 @@
   | _, nil => absurd linarith
   | 0, a :: l => a
   | suc n, a :: l => nth n l (NatOrder.unsuc< p)
+
+\func anyIdx (n : Nat) (f : Fin n -> Bool) : Bool \elim n
+  | 0     => false
+  | suc n => f 0 or anyIdx n (\lam i => f (suc i))
+
+\func concatIdx {A : \Type} (n : Nat) (f : Fin n -> Array A) : Array A \elim n
+  | 0     => nil
+  | suc n => f 0 ++ concatIdx n (\lam i => f (suc i))

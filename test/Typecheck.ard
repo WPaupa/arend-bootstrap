@@ -44,13 +44,20 @@
 \func useData_p => println useData
 \func typecheckData_p => println ((typecheck useData).runReaderT
     (extend (GlobalVar "D" 100 (EUniv Set0) nothingE)
-    (extendDef (DData (\new DataDef "D" 100 nil Set0 (
-      (\new ConsDef "C" 101 100 (LocalVar "y" 3 ETInt nothingE :: nil) nothing nothing) ::
-      (\new ConsDef "E" 102 100 nil nothing nothing) :: nil
-                                                     ) nothing false)) emptyEnv)))
+        (extendDef (DData (\new DataDef "D" 100 nil Set0 (
+          (\new ConsDef "C" 101 100 (LocalVar "y" 3 ETInt nothingE :: nil) nothing nothing) ::
+          (\new ConsDef "E" 102 100 nil nothing nothing) :: nil
+        ) nothing false)) emptyEnv)))
 \func typecheckDataWrong_p => println ((typecheck useData).runReaderT
     (extend (GlobalVar "D" 100 (EUniv Set0) nothingE)
         (extendDef (DData (\new DataDef "D" 100 nil Set0 (
           (\new ConsDef "C" 101 100 (LocalVar "y" 3 ETInt nothingE :: nil) nothing nothing) ::
           (\new ConsDef "E" 103 100 nil nothing nothing) :: nil
+        ) nothing false)) emptyEnv)))
+\func useData_wrong : Expr => quot { \lam (x : (D$100 : \Set0)) => \case x \as u \return String \with { | C$101 (y : Int) => y | E$102 => 0 } }
+\func typecheckData_wrong_p => println ((typecheck useData_wrong).runReaderT
+    (extend (GlobalVar "D" 100 (EUniv Set0) nothingE)
+        (extendDef (DData (\new DataDef "D" 100 nil Set0 (
+          (\new ConsDef "C" 101 100 (LocalVar "y" 3 ETInt nothingE :: nil) nothing nothing) ::
+          (\new ConsDef "E" 102 100 nil nothing nothing) :: nil
         ) nothing false)) emptyEnv)))

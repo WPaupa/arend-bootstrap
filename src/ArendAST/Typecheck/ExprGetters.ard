@@ -15,6 +15,7 @@
 \import Monad.Do
 \import Paths.Meta
 \import Set
+\import Utilities.Array
 \import Utilities.Monad
 \import Utilities.Monad.Reader
 \import Utilities.Arith
@@ -94,6 +95,13 @@
     return (cv ++ csv)
   }
 
+\func patternVars (p : Pattern) : Array Var \elim p
+  | PVar v            => v :: nil
+  | PConstr _ subpats => concatIdx subpats.len (\lam i => patternVars (subpats i))
+  | PAbsurd           => nil
+
+\func patternArrayVars (ps : Array Pattern) : Array Var => concatIdx ps.len (\lam i => patternVars (ps i))
+
 \func addEvaluations (_ : Array Var) (_ : Array Expr) : Array Var
   | nil, _ => nil
   | v, nil => v
@@ -148,3 +156,15 @@
 \func consById (cs : Array ConsDef) (cid : Nat) : Maybe ConsDef \elim cs
   | nil     => nothing
   | c :: cs => if (c.id ==_B cid) (just c) (consById cs cid)
+
+\func patternToExpr (p : Pattern) : Expr \elim p
+  | PVar v            => EVar v
+  | PConstr cv subpats => EConsCall cv LArgEmpty nil (mkArray (\lam i => patternToExpr (subpats i)))
+  | PAbsurd           => EGoal
+
+\func patIsAbsurd (p : Pattern) : Bool \elim p
+  | PVar _            => false
+  | PAbsurd           => true
+  | PConstr _ subpats => anyIdx subpats.len (\lam i => patIsAbsurd (subpats i))
+
+\func patsAnyAbsurd (ps : Array Pattern) : Bool => anyIdx ps.len (\lam i => patIsAbsurd (ps i))

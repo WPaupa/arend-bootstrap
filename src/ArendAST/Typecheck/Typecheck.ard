@@ -88,7 +88,7 @@
           \lam ti => typecheck (a i),
           unify ti (expectedArgType f.params a i)
         }),
-        normalize (spineResult f.params f.resultType Set0 a)
+        normalize (spineResult f.params f.resultType Set0 a) -- FUTURE: deal with levels
       }
       | _ => throw (ErrUnbound v)
     }
@@ -106,6 +106,8 @@
             \lam ti => typecheck (consArgs i),
             unify ti (expectedArgType (d.params ++ c.params) (typeArgs ++ consArgs) (typeArgs.len Nat.+ i))
           }),
+          -- the data-type arguments must conform to the constructor's index patterns
+          checkConsPatterns c typeArgs,
           normalize (EDataCall (GlobalVar d.name c.datatype (EUniv d.sort) nothingE) l typeArgs)
         }
         | _ => throw (ErrUnbound v)
@@ -198,7 +200,7 @@
     }),
     forEachIndexM params.len (\lam i => localT (extendArray (take i params (linarith (fin_< i)))) (typecheckVar (params i))),
     localT (extendArray params) (typecheck retType),
-    checkMatch m params,
+    checkMatch m params retType,
     normalize (substParams params retType args)
   }
   | ELet isSFunc clauses e => do {
@@ -291,7 +293,16 @@
 
 \func checkPattern (pat : Pattern) (ty : Expr) : Env (\Sigma) \elim pat
   | PVar _ => return ()
-  | PAbsurd => return ()
+  | PAbsurd => do {
+    \lam env => askT,
+    \case getCallDef env ty \with {
+      | just (DData d) => \case d.constrs \with {
+        | nil     => return ()
+        | _ :: _  => throw ErrNonAbsurd
+      } -- FUTURE: what if ty is not a Var/Call
+      | _ => throw ErrNonAbsurd
+    }
+  }
   | PConstr cv subpats => do {
     \lam env => askT,
     \case getCallDef env ty \with {
@@ -306,12 +317,56 @@
     }
   }
 
-\func checkClause (c : Clause) (params : Array Var) : Env (\Sigma) \elim c
+\func checkClause (c : Clause) (params : Array Var) (retType : Expr) : Env (\Sigma) \elim c
   | cClause pats body => \case decEqNat pats.len params.len \with {
     | no _   => throw (ErrArity params.len pats.len)
-    | yes eq => forEachIndexM pats.len (\lam i => checkPattern (pats i) (varType (params (rewriteI eq i))))
+    | yes eq => do {
+      -- every pattern is well-formed for the type it matches
+      forEachIndexM pats.len (\lam i => checkPattern (pats i) (varType (params (rewriteI eq i)))),
+      -- a body-less clause must be absurd and vice versa
+      checkAbsurd body (patsAnyAbsurd pats),
+      -- the body is checked against the return type
+      localT (extendArray (patternArrayVars pats))
+        (checkBody body (substParams params retType (mkArray (\lam i => patternToExpr (pats i)))))
+    }
   }
 
-\func checkMatch (m : Match) (params : Array Var) : Env (\Sigma) \elim m
-  | DoMatch clauses => forEachIndexM clauses.len (\lam i => checkClause (clauses i) params)
-  | _               => return ()
+\func checkAbsurd (body : MaybeExpr) (absurd : Bool) : Env (\Sigma) \elim body, absurd
+  | nothingE, true  => return ()
+  | nothingE, false => throw ErrNonAbsurd
+  | justE _, true   => throw ErrBadPattern
+  | justE _, false  => return ()
+
+\func checkBody (body : MaybeExpr) (expected : Expr) : Env (\Sigma) \elim body
+  | nothingE => return ()
+  | justE b  => do {
+    \lam tb => typecheck b,
+    unify tb expected
+  }
+
+\func checkMatch (m : Match) (params : Array Var) (retType : Expr) : Env (\Sigma) \elim m
+  | DoMatch clauses => forEachIndexM clauses.len (\lam i => checkClause (clauses i) params retType)
+  | IntervalMatch _ _ _ => throw ErrIntervalMatch
+  | NoMatch _ => return ()
+
+\func matchPattern (e : Expr) (p : Pattern) : Env (\Sigma) \elim p
+  | PVar _ => return ()
+  | PAbsurd => throw ErrBadPattern
+  | PConstr cv subps => \case e \with {
+    | EConsCall cv' l' ta' ca' => \case getVarId cv ==_B getVarId cv' \with {
+      | false => throw ErrBadPattern
+      | true => \case decEqNat ca'.len subps.len \with {
+        | no _   => throw (ErrArity subps.len ca'.len)
+        | yes eq => forEachIndexM ca'.len (\lam i => matchPattern (ca' i) (subps (rewriteI eq i)))
+      }
+    }
+    | _ => return () -- FUTURE: check non-constructor exprs
+  }
+
+\func checkConsPatterns (c : ConsDef) (typeArgs : Array Expr) : Env (\Sigma) => \case c.patterns \with {
+  | nothing   => return ()
+  | just pats => \case decEqNat typeArgs.len pats.len \with {
+    | no _   => throw (ErrArity pats.len typeArgs.len)
+    | yes eq => forEachIndexM typeArgs.len (\lam i => matchPattern (typeArgs i) (pats (rewriteI eq i)))
+  }
+}

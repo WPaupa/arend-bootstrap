@@ -10,15 +10,14 @@
   | ErrNotSigma Expr
   | ErrNotUniv Expr
   | ErrInfinityUniverse
-  | ErrPropLevelNonZero Sort
-  | ErrTypeMismatch Expr Expr
   | ErrUnknownType
   | ErrArity Nat Nat                    -- expected spine length, actual
   | ErrBadPattern
   | ErrNonAbsurd
-  | ErrLevelParamNotAllowed LevelVar
+  | ErrLevelParam LevelVar
   | ErrUnify
   | ErrOutOfFuel
+  | ErrIntervalMatch
 
 \data Result (A : \Type)
   | ok A
