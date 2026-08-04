@@ -38,6 +38,10 @@
     | false => errUni
     | true => return ()
   }
+  | ENat n, ENat m => \case n ==_B m \with {
+    | false => errUni
+    | true => return ()
+  }
   | EFin m f, EFin m' f' => unify m m' >> unify f f'
   | EString s, EString w => \case s,w \with {}
   | EApp t1 t2 e, EApp t1' t2' e' => unify t1 t1' >> unify t2 t2'
