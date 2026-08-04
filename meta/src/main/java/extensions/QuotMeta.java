@@ -82,6 +82,8 @@ public class QuotMeta implements MetaResolver {
   static final int ETSTRING = 17;
   static final int ENAT = 18;
   static final int ETNAT = 19;
+  static final int EFIN = 20;
+  static final int ETFIN = 21;
   // List encoding markers (kept distinct from node tags). A list is a cons/nil chain rather than a
   // single tuple, because a one-element tuple `(x)` collapses to `x` in Arend concrete syntax.
   static final int NIL = 100;
@@ -280,6 +282,14 @@ public class QuotMeta implements MetaResolver {
       if (intLit != null) {
         return ascribe(intLit, ctx, ascribed);
       }
+      ConcreteExpression finLit = finLteral(e, ctx);
+      if (finLit != null) {
+        return ascribe(finLit, ctx, ascribed);
+      }
+      ConcreteExpression finTLit = finTypeLiteral(e, ctx);
+      if (finTLit != null) {
+        return ascribe(finTLit, ctx, ascribed);
+      }
 
       // Application `f a_1 ... a_n` (at resolve time this is an unresolved sequence, not a
       // ConcreteAppExpression, so use the uniform argument-sequence accessor).
@@ -462,6 +472,27 @@ public class QuotMeta implements MetaResolver {
       }
       java.math.BigInteger v = num.getNumber();
       return factory.tuple(List.of(tag(EINT), factory.number(neg ? v.negate() : v)));
+    }
+
+    private @Nullable ConcreteExpression finLteral(ConcreteExpression e, Ctx ctx) {
+      List<? extends ConcreteArgument> seq = e.getArgumentsSequence();
+      if (seq.size() != 3 || !(seq.get(0).getExpression() instanceof ConcreteReferenceExpression head)) {
+        return null;
+      }
+      if (!(head.getReferent().getRefName().equals("fromNat") || head.getReferent().getRefName().equals("Fin.fromNat"))) {
+        return null;
+      }
+      return factory.tuple(List.of(tag(EFIN), enc(seq.get(1).getExpression(), ctx), enc(seq.get(2).getExpression(), ctx)));
+    }
+    private @Nullable ConcreteExpression finTypeLiteral (ConcreteExpression e, Ctx ctx) {
+      List <? extends ConcreteArgument> seq = e.getArgumentsSequence();
+      if (seq.size() != 2 || !(seq.get(0).getExpression() instanceof ConcreteReferenceExpression head)) {
+        return null;
+      }
+      if (!head.getReferent().getRefName().equals("Fin")) {
+        return null;
+      }
+      return factory.tuple(List.of(tag(ETFIN), enc(seq.get(1).getExpression(), ctx)));
     }
 
     // MaybeExpr: nothing (null) -> a bare marker; just -> (JUST, enc).

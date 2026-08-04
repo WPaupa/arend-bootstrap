@@ -61,3 +61,5 @@
           (\new ConsDef "C" 101 100 (LocalVar "y" 3 ETInt nothingE :: nil) nothing nothing) ::
           (\new ConsDef "E" 102 100 nil nothing nothing) :: nil
         ) nothing false)) emptyEnv)))
+\func finTest : Expr => quot { fromNat {5} 3 : Fin 5 }
+\func finTest_p => println ((typecheck finTest).runReaderT emptyEnv)

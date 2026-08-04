@@ -45,6 +45,8 @@ public class QuotBuild extends BaseMetaDefinition {
   @Dependency ArendRef ETString;
   @Dependency ArendRef ENat;
   @Dependency ArendRef ETNat;
+  @Dependency ArendRef EFin;
+  @Dependency ArendRef ETFin;
   // Var constructors
   @Dependency ArendRef GlobalVar;
   @Dependency ArendRef LocalVar;
@@ -200,6 +202,12 @@ public class QuotBuild extends BaseMetaDefinition {
         }
         case QuotMeta.ETNAT -> {
           return con(ETNat);
+        }
+        case QuotMeta.EFIN -> {
+          return con(EFin, dec(fs.get(1)), dec(fs.get(2)));
+        }
+        case QuotMeta.ETFIN -> {
+          return con(ETFin, dec(fs.get(1)));
         }
         case QuotMeta.ETSTRING -> {
           return con(ETString);
