@@ -32,6 +32,13 @@
   | EInt i => return ETInt
   | ENat n => return ETNat
   | EString s => return ETString
+  | EFin m f => do {
+    \lam tm => typecheck m,
+    \lam tf => typecheck f,
+    unify tf ETNat,
+    unify tm ETNat,
+    return (ETFin m)
+  }
   | EApp e1 e2 isExplicit => do {
     \lam te1 => typecheck e1,
     \lam te2 => typecheck e2,
@@ -201,10 +208,13 @@
   }
   | EArrayType len e => do {
     \lam tl => typecheck len,
-    unify tl ETInt,
+    unify tl ETNat,
     \lam tf => typecheck e,
     \case getPiType tf \with {
-      | just (f :: nil, EUniv s, _) => return (EUniv s) -- FUTURE: unify f with (Fin len)
+      | just (f :: nil, EUniv s, _) => do {
+        unify (varType f) (ETFin len), -- a bit restrictive
+        return (EUniv s)
+      }
       | _ => throw (ErrNotPi tf)
     }
   }
@@ -272,6 +282,11 @@
   | EGoal => return EGoal
   | ETInt => return (EUniv Set0)
   | ETNat => return (EUniv Set0)
+  | ETFin n => do {
+    \lam tn => typecheck n,
+    unify tn ETNat,
+    return (EUniv Set0)
+  }
   | ETString => return (EUniv Set0)
 
 
@@ -362,6 +377,7 @@
   }
 
 \func checkMatch (m : Match) (params : Array Var) (retType : Expr) : Env (\Sigma) \elim m
+  -- FUTURE: check if constructors are of the correct type. Figure out what to do with Nat/Int/Fin
   | DoMatch clauses => forEachIndexM clauses.len (\lam i => checkClause (clauses i) params retType)
   | IntervalMatch _ _ _ => throw ErrIntervalMatch
   | NoMatch _ => return ()

@@ -48,6 +48,12 @@
   | EVar (LocalVar  _ _ _ (justE (EPiType vs v s))) => just (vs, v, s)
   | t => nothing
 
+\func getArrayType (_ : Expr) : Maybe (\Sigma Expr Expr)
+  | EArrayType len elems => just (len, elems)
+  | EVar (GlobalVar _ _ _ (justE (EArrayType len elems))) => just (len, elems)
+  | EVar (LocalVar _ _ _ (justE (EArrayType len elems))) => just (len, elems)
+  | t => nothing
+
 \func projComponentType (vs : Array Var) (body : MaybeExpr) (k i : Nat) : Expr \elim vs, i
   | nil, _       => EGoal
   | v :: _, 0    => varType v

@@ -38,6 +38,7 @@
     | false => errUni
     | true => return ()
   }
+  | EFin m f, EFin m' f' => unify m m' >> unify f f'
   | EString s, EString w => \case s,w \with {}
   | EApp t1 t2 e, EApp t1' t2' e' => unify t1 t1' >> unify t2 t2'
   | ELam a t s, ELam a' t' s' => mapM2 unifyVar a a' >> unify t t'
@@ -111,6 +112,7 @@
   | ETInt, ETInt => return ()
   | ETString, ETString => return ()
   | ETNat, ETNat => return ()
+  | ETFin n, ETFin m => unify n m
   | _, _ => errUni
 
 \func unifyMaybe (_ _ : MaybeExpr) : Env (\Sigma)

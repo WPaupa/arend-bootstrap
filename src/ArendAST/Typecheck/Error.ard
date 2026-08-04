@@ -9,6 +9,7 @@
   | ErrNotPi Expr
   | ErrNotSigma Expr
   | ErrNotUniv Expr
+  | ErrNotArray Expr
   | ErrInfinityUniverse
   | ErrUnknownType
   | ErrArity Nat Nat                    -- expected spine length, actual

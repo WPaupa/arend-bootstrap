@@ -66,9 +66,11 @@
   | ETInt => ETInt
   | ETNat => ETNat
   | ETString => ETString
+  | ETFin m => ETFin (f (closure f m))
   | EUniv s => EUniv s
   | EGoal => EGoal
   | EInt i => EInt i
+  | EFin m n => EFin (f (closure f m)) (f (closure f n))
   | ENat n => ENat n
   | EString s => EString s
 

@@ -34,6 +34,7 @@
   | EInt Int
   | ENat Nat
   | EString String
+  | EFin (max : Expr) (fromNat : Expr)
 
   -- Functions
   | EApp Expr Expr (isExplicit : Bool)
@@ -77,6 +78,7 @@
   | ETInt
   | ETNat
   | ETString
+  | ETFin Expr
   | EInterval
   | EArrayType (len : Expr) (elemType : Expr)
   -- \type synonym
