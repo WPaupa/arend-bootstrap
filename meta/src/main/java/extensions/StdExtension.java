@@ -15,7 +15,6 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Collections;
 
 import static org.arend.ext.prettyprinting.doc.DocFactory.multiline;
-import static org.arend.ext.prettyprinting.doc.DocFactory.text;
 
 /**
  * The main extension class of the arend-bootstrap library. It declares the metas provided by the
