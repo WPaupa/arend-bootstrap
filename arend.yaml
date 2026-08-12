@@ -1,7 +1,7 @@
-langVersion: 1.11
+langVersion: 1.12.0
 sourcesDir: src
 binariesDir: bin
 extensionsDir: ext
 extensionMainClass: extensions.StdExtension
-dependencies: [ arend-lib ]
+dependencies: [arend-lib]
 testsDir: test
