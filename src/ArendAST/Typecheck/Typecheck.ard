@@ -83,7 +83,7 @@
     \case getSigmaType te \with {
       | nothing => throw (ErrNotSigma te)
       | just a => \case nat_<=-dec.nat_<=_Bool (suc n) a.len \with {
-        | true => return (projComponentType a (justE e) 0 n)
+        | true => return (projComponentType a (just e) 0 n)
         | false => throw (ErrArity a.len n)
       }
     }
@@ -116,7 +116,7 @@
           }),
           -- the data-type arguments must conform to the constructor's index patterns
           checkConsPatterns c typeArgs,
-          normalize (EDataCall (GlobalVar d.name c.datatype (EUniv d.sort) nothingE) l typeArgs)
+          normalize (EDataCall (GlobalVar d.name c.datatype (EUniv d.sort) nothing) l typeArgs)
         }
         | _ => throw (ErrUnbound v)
       }
@@ -167,7 +167,7 @@
     typecheck e,
     \lam env => askT,
     \case parent, e \with {
-      | nothingE, EClassCall v l implementations s v1 => \case getDef env (getVarId v) \with {
+      | nothing, EClassCall v l implementations s v1 => \case getDef env (getVarId v) \with {
         | just (DClass cls) => checkCoverage cls implementations >> normalize e
         | _ => throw (ErrUnbound v)
       }
@@ -183,7 +183,7 @@
     }),
     typecheckMaybe tail,
     -- FUTURE: calculate length of tail
-    return (EArrayType (\case tail \with { | nothingE => ENat elems.len | justE _ => EGoal }) e)
+    return (EArrayType (\case tail \with { | nothing => ENat elems.len | just _ => EGoal }) e)
   }
   | EPath l e1 e2 => do {
     typecheck e1,
@@ -278,8 +278,8 @@
       | _ => throw (ErrUnbound type)
     }
   }
-  | EError (justE t) => fmapM (\lam e => EError (justE e)) (typecheck t)
-  | EError nothingE => return (EError nothingE)
+  | EError (just t) => fmapM (\lam e => EError (just e)) (typecheck t)
+  | EError nothing => return (EError nothing)
   | EGoal => return EGoal
   | ETInt => return (EUniv Set0)
   | ETNat => return (EUniv Set0)
@@ -292,34 +292,34 @@
 
 
 \func typecheckVar (_ : Var) : Env Expr
-  | GlobalVar VName VId VType (justE VEvaluation) => do {
+  | GlobalVar VName VId VType (just VEvaluation) => do {
     \lam ttype => typecheck VType,
     \lam teval => typecheck VEvaluation,
     unify VType teval,
     checkIsUniv ttype,
     return VType
   }
-  | LocalVar VName index VType (justE VEvaluation) => do {
+  | LocalVar VName index VType (just VEvaluation) => do {
     \lam ttype => typecheck VType,
     \lam teval => typecheck VEvaluation,
     unify VType teval,
     checkIsUniv ttype,
     return VType
   }
-  | GlobalVar VName VId VType nothingE => do {
+  | GlobalVar VName VId VType nothing => do {
     \lam ttype => typecheck VType,
     checkIsUniv ttype,
     return VType
     }
-  | LocalVar VName index VType nothingE => do {
+  | LocalVar VName index VType nothing => do {
     \lam ttype => typecheck VType,
     checkIsUniv ttype,
     return VType
   }
 
-\func typecheckMaybe (m : MaybeExpr) : Env (\Sigma) \elim m
-  | nothingE => return ()
-  | justE e  => typecheck e >> return ()
+\func typecheckMaybe (m : Maybe Expr) : Env (\Sigma) \elim m
+  | nothing => return ()
+  | just e  => typecheck e >> return ()
 
 \func typecheckLetClause (c : LetClause) : Env (\Sigma) \elim c
   | cLetClause name body type _ => typecheck body >> typecheckMaybe type
@@ -364,15 +364,15 @@
     }
   }
 
-\func checkAbsurd (body : MaybeExpr) (absurd : Bool) : Env (\Sigma) \elim body, absurd
-  | nothingE, true  => return ()
-  | nothingE, false => throw ErrNonAbsurd
-  | justE _, true   => throw ErrBadPattern
-  | justE _, false  => return ()
+\func checkAbsurd (body : Maybe Expr) (absurd : Bool) : Env (\Sigma) \elim body, absurd
+  | nothing, true  => return ()
+  | nothing, false => throw ErrNonAbsurd
+  | just _, true   => throw ErrBadPattern
+  | just _, false  => return ()
 
-\func checkBody (body : MaybeExpr) (expected : Expr) : Env (\Sigma) \elim body
-  | nothingE => return ()
-  | justE b  => do {
+\func checkBody (body : Maybe Expr) (expected : Expr) : Env (\Sigma) \elim body
+  | nothing => return ()
+  | just b  => do {
     \lam tb => typecheck b,
     unify tb expected
   }

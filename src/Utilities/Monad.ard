@@ -1,4 +1,5 @@
 \import Data.Array
+\import Data.Maybe
 
 \class Monad (M : \Set0 -> \Set0)
   | return {A : \Set0} : A -> M A
@@ -21,6 +22,10 @@
 \func mapM {M : Monad} {A B : \Set0} (f : A -> M B) (xs : Array A) : M (Array B) \elim xs
   | nil     => return nil
   | x :: xs => f x >>= \lam y => mapM f xs >>= \lam ys => return (y :: ys)
+
+\func mapMaybeM {M : Monad} {A B : \Set0} (f : A -> M B) (x : Maybe A) : M (Maybe B) \elim x
+  | just m => fmapM just (f m)
+  | nothing => return nothing
 
 \func foldM {M : Monad} {A B : \Set0} (f : B -> A -> M B) (acc : B) (xs : Array A) : M B \elim xs
   | nil => return acc

@@ -32,34 +32,34 @@
 
 \func checkIsUniv (_ : Expr) : Env (\Sigma)
   | EUniv _ => return ()
-  | EVar (GlobalVar _ _ _ (justE (EUniv _))) => return ()
-  | EVar (LocalVar  _ _ _ (justE (EUniv _))) => return ()
+  | EVar (GlobalVar _ _ _ (just (EUniv _))) => return ()
+  | EVar (LocalVar  _ _ _ (just (EUniv _))) => return ()
   | t => throw (ErrNotUniv t)
 
 \func getSigmaType (_ : Expr) : Maybe (Array Var)
   | ESigmaType vs s => just vs
-  | EVar (GlobalVar _ _ _ (justE (ESigmaType vs s))) => just vs
-  | EVar (LocalVar  _ _ _ (justE (ESigmaType vs s))) => just vs
+  | EVar (GlobalVar _ _ _ (just (ESigmaType vs s))) => just vs
+  | EVar (LocalVar  _ _ _ (just (ESigmaType vs s))) => just vs
   | t => nothing
 
 \func getPiType (_ : Expr) : Maybe (\Sigma (Array Var) Expr Sort)
   | EPiType vs v s => just (vs, v, s)
-  | EVar (GlobalVar _ _ _ (justE (EPiType vs v s))) => just (vs, v, s)
-  | EVar (LocalVar  _ _ _ (justE (EPiType vs v s))) => just (vs, v, s)
+  | EVar (GlobalVar _ _ _ (just (EPiType vs v s))) => just (vs, v, s)
+  | EVar (LocalVar  _ _ _ (just (EPiType vs v s))) => just (vs, v, s)
   | t => nothing
 
 \func getArrayType (_ : Expr) : Maybe (\Sigma Expr Expr)
   | EArrayType len elems => just (len, elems)
-  | EVar (GlobalVar _ _ _ (justE (EArrayType len elems))) => just (len, elems)
-  | EVar (LocalVar _ _ _ (justE (EArrayType len elems))) => just (len, elems)
+  | EVar (GlobalVar _ _ _ (just (EArrayType len elems))) => just (len, elems)
+  | EVar (LocalVar _ _ _ (just (EArrayType len elems))) => just (len, elems)
   | t => nothing
 
-\func projComponentType (vs : Array Var) (body : MaybeExpr) (k i : Nat) : Expr \elim vs, i
+\func projComponentType (vs : Array Var) (body : Maybe Expr) (k i : Nat) : Expr \elim vs, i
   | nil, _       => EGoal
   | v :: _, 0    => varType v
   | v :: vs, suc i => \case body \with {
-    | justE e  => projComponentType (substVArray vs v (EProj e k false)) body (suc k) i
-    | nothingE => projComponentType vs body (suc k) i
+    | just e  => projComponentType (substVArray vs v (EProj e k false)) body (suc k) i
+    | nothing => projComponentType vs body (suc k) i
   }
 
 \func fieldInstType (fd : FieldDef) (body : Expr) : Env Expr => \case getPiType fd.type \with {
@@ -68,17 +68,17 @@
 }
 
 \func letClauseVar (_ : LetClause) : Env (Array Var)
-  | cLetClause name body (justE type) true => letPatternVar type name body (justE body)
-  | cLetClause name body (justE type) false => letPatternVar type name body nothingE
+  | cLetClause name body (just type) true => letPatternVar type name body (just body)
+  | cLetClause name body (just type) false => letPatternVar type name body nothing
   | _ => throw ErrUnknownType \where {
-  \func letPatternVar (rtype : Expr) (pat : LetPattern) (bodyR : Expr) (body : MaybeExpr) : Env (Array Var) \elim pat
+  \func letPatternVar (rtype : Expr) (pat : LetPattern) (bodyR : Expr) (body : Maybe Expr) : Env (Array Var) \elim pat
     | LPName name id => return (GlobalVar name id rtype body :: nil)
     | LPTuple l => \case getSigmaType rtype \with {
       | nothing => throw (ErrNotSigma rtype)
       | just vs => \case vs.len ==_B l.len \with {
         | false => throw (ErrArity vs.len l.len)
         | true => foldIndexM (++) nil l.len (\lam i => letPatternVar (projComponentType vs body 0 i) (l i)
-            bodyR (MaybeExpr.map (\lam e => EProj e i false) body))
+            bodyR (Maybe.map (\lam e => EProj e i false) body))
       }
     }
     | LPRecord l => do {
@@ -87,7 +87,7 @@
         | just (DField fd) => do {
           \lam instType => fieldInstType fd bodyR,
           letPatternVar instType (l i).2 bodyR
-            (MaybeExpr.map (\lam e => EFieldCall (GlobalVar fd.name (l i).1 fd.type nothingE) e) body) }
+            (Maybe.map (\lam e => EFieldCall (GlobalVar fd.name (l i).1 fd.type nothing) e) body) }
         | _ => throw ErrUnknownType
       })
     }
@@ -111,8 +111,8 @@
 \func addEvaluations (_ : Array Var) (_ : Array Expr) : Array Var
   | nil, _ => nil
   | v, nil => v
-  | (GlobalVar n i t _ :: vs), (e :: es) => GlobalVar n i t (justE e) :: addEvaluations vs es
-  | (LocalVar n i t _ :: vs), (e :: es) => LocalVar n i t (justE e) :: addEvaluations vs es
+  | (GlobalVar n i t _ :: vs), (e :: es) => GlobalVar n i t (just e) :: addEvaluations vs es
+  | (LocalVar n i t _ :: vs), (e :: es) => LocalVar n i t (just e) :: addEvaluations vs es
 
 \func scopeCheck (v : Var) : Env (\Sigma) => do {
   \lam (env : CheckEnv) => askT,

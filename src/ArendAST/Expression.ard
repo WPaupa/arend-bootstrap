@@ -1,32 +1,11 @@
 \import ArendAST.Level
 \import Data.Bool
 \import Utilities.Monad
-
-\data MaybeExpr : \Set0
-  | justE Expr
-  | nothingE \where {
-  \func map (f : Expr -> Expr) (x : MaybeExpr) : MaybeExpr \elim x
-    | justE e => justE (f e)
-    | nothingE => nothingE
-  \func mapM {M : Monad} (f : Expr -> M Expr) (x : MaybeExpr) : M MaybeExpr \elim x
-    | justE e => fmapM justE (f e)
-    | nothingE => return nothingE
-}
-
-\data MaybeMatch : \Set0
-  | justM Match
-  | nothingM \where {
-  \func map (f : Match -> Match) (x : MaybeMatch) : MaybeMatch \elim x
-    | justM m => justM (f m)
-    | nothingM => nothingM
-  \func mapM {M : Monad} (f : Match -> M Match) (x : MaybeMatch) : M MaybeMatch \elim x
-    | justM m => fmapM justM (f m)
-    | nothingM => return nothingM
-}
+\import Data.Maybe
 
 \data Var : \Set0
-  | GlobalVar (VName : String) (VId : Nat)   (VType : Expr) (VEvaluation : MaybeExpr)
-  | LocalVar  (VName : String) (index : Nat) (VType : Expr) (VEvaluation : MaybeExpr)
+  | GlobalVar (VName : String) (VId : Nat)   (VType : Expr) (VEvaluation : Maybe Expr)
+  | LocalVar  (VName : String) (index : Nat) (VType : Expr) (VEvaluation : Maybe Expr)
 
 \data Expr : \Set0
   -- Atoms
@@ -53,17 +32,17 @@
   -- a Var in implementations is always global, refers to the name of the field, and always carries an evaluation
 
   -- Records
-  | ENew (parent : MaybeExpr) Expr
+  | ENew (parent : Maybe Expr) Expr
 
   -- Arrays
-  | EArray (Array PLevel) (elemType : Expr) (elems : Array Expr) (tail : MaybeExpr)
+  | EArray (Array PLevel) (elemType : Expr) (elems : Array Expr) (tail : Maybe Expr)
 
   -- Paths
   | EPath (Array PLevel) Expr Expr
   | EPathAt Expr Expr
 
   -- Patterns
-  | ECase (isSFunc : Bool) (Array Var) (returnType : Expr) (returnLevel : MaybeExpr) Match (args : Array Expr)
+  | ECase (isSFunc : Bool) (Array Var) (returnType : Expr) (returnLevel : Maybe Expr) Match (args : Array Expr)
   | ELet (isSFunc : Bool) (Array LetClause) (in : Expr)
 
   -- Wrappers
@@ -86,16 +65,16 @@
   | ETypeDestr (type : Var) Expr
 
   -- Errors
-  | EError MaybeExpr
+  | EError (Maybe Expr)
   | EGoal
 
 \data Match : \Set0
   | NoMatch Expr
   | DoMatch (Array Clause)
-  | IntervalMatch (nparams : Nat) (Array (\Sigma (vleft : MaybeExpr) (vright : MaybeExpr))) (fallback : MaybeMatch)
+  | IntervalMatch (nparams : Nat) (Array (\Sigma (vleft : Maybe Expr) (vright : Maybe Expr))) (fallback : Maybe Match)
 
 \data Clause : \Set0
-  | cClause (pats : Array Pattern) (body : MaybeExpr)
+  | cClause (pats : Array Pattern) (body : Maybe Expr)
 
 \data Pattern : \Set0
   | PVar Var
@@ -103,7 +82,7 @@
   | PAbsurd
 
 \data LetClause : \Set0
-  | cLetClause (name : LetPattern) (body : Expr) (type : MaybeExpr) (isSFunc : Bool)
+  | cLetClause (name : LetPattern) (body : Expr) (type : Maybe Expr) (isSFunc : Bool)
 
 \data LetPattern : \Set0
   | LPName (name : String) (id : Nat)

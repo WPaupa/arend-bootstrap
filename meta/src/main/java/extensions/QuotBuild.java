@@ -50,9 +50,9 @@ public class QuotBuild extends BaseMetaDefinition {
   // Var constructors
   @Dependency ArendRef GlobalVar;
   @Dependency ArendRef LocalVar;
-  // MaybeExpr
-  @Dependency ArendRef nothingE;
-  @Dependency ArendRef justE;
+  // Maybe Expr (Data.Maybe)
+  @Dependency ArendRef nothing;
+  @Dependency ArendRef just;
   // let clauses / patterns
   @Dependency ArendRef cLetClause;
   @Dependency ArendRef LPName;
@@ -232,15 +232,15 @@ public class QuotBuild extends BaseMetaDefinition {
     private ConcreteExpression decVar(ConcreteExpression e) {
       List<? extends ConcreteExpression> fs = ((ConcreteTupleExpression) e).getFields();
       boolean global = intOf(fs.get(0)) == 1;
-      return con(global ? GlobalVar : LocalVar, fs.get(1), fs.get(2), dec(fs.get(3)), con(nothingE));
+      return con(global ? GlobalVar : LocalVar, fs.get(1), fs.get(2), dec(fs.get(3)), con(nothing));
     }
 
-    // MaybeExpr: a bare number -> nothingE; (JUST, enc) -> justE enc.
+    // Maybe Expr: a bare number -> nothing; (JUST, enc) -> just enc.
     private ConcreteExpression decMaybe(ConcreteExpression e) {
       if (e instanceof ConcreteTupleExpression t) {
-        return con(justE, dec(t.getFields().get(1)));
+        return con(just, dec(t.getFields().get(1)));
       }
-      return con(nothingE);
+      return con(nothing);
     }
 
     private ConcreteExpression decLetPattern(ConcreteExpression e) {
@@ -314,7 +314,7 @@ public class QuotBuild extends BaseMetaDefinition {
       List<ConcreteExpression> out = new ArrayList<>();
       for (ConcreteExpression entry : chain(e)) {
         List<? extends ConcreteExpression> ef = ((ConcreteTupleExpression) entry).getFields();
-        out.add(con(LocalVar, ef.get(0), ef.get(1), dec(ef.get(2)), con(nothingE)));
+        out.add(con(LocalVar, ef.get(0), ef.get(1), dec(ef.get(2)), con(nothing)));
       }
       return arr(out);
     }

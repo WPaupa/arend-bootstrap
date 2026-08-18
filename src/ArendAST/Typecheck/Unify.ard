@@ -9,6 +9,7 @@
 \import Arith.Int
 \import Monad.Do
 \import Data.Bool
+\import Data.Maybe
 
 \func errUni : Env (\Sigma) => throw ErrUnify
 
@@ -119,9 +120,9 @@
   | ETFin n, ETFin m => unify n m
   | _, _ => errUni
 
-\func unifyMaybe (_ _ : MaybeExpr) : Env (\Sigma)
-  | nothingE, nothingE => return ()
-  | justE e, justE e' => unify e e'
+\func unifyMaybe (_ _ : Maybe Expr) : Env (\Sigma)
+  | nothing, nothing => return ()
+  | just e, just e' => unify e e'
   | _, _ => errUni
 
 \func unifyMatch (_ _ : Match) : Env (\Sigma)
@@ -137,9 +138,9 @@
   }
   | _, _ => errUni
 
-\func unifyMaybeMatch (_ _ : MaybeMatch) : Env (\Sigma)
-  | nothingM, nothingM => return ()
-  | justM m, justM m' => unifyMatch m m'
+\func unifyMaybeMatch (_ _ : Maybe Match) : Env (\Sigma)
+  | nothing, nothing => return ()
+  | just m, just m' => unifyMatch m m'
   | _, _ => errUni
 
 \func unifyClause (_ _ : Clause) : Env (\Sigma)

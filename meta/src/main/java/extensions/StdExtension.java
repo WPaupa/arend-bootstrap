@@ -63,7 +63,7 @@ public class StdExtension implements ArendExtension {
         `quot { E }` reifies the surface syntax of `E` into a value of the core AST `Expr` (see `ArendAST.Expression`).
 
         This is a purely syntactic translation; `E` is not typechecked.
-        * A global variable is written `name$id` and becomes `EVar (GlobalVar name id EGoal nothingE)`; its existence is not checked.
+        * A global variable is written `name$id` and becomes `EVar (GlobalVar name id EGoal nothing)`; its existence is not checked.
         * Any other name is a local and must be bound by an enclosing `\\lam`/`\\Pi`/`\\Sigma` in `E`, otherwise it is an error. Its `index` is its de Bruijn level (outermost binder = 0).
         * A default sort (`lp = 0`, `lh = inf`) is used wherever a sort is required (surface syntax carries none).
         * Subexpressions with no readable representation (`\\let`, `\\case`, `\\new`, ...) become `EGoal`.

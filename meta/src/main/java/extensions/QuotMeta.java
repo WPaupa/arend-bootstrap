@@ -34,7 +34,7 @@ import java.util.List;
  * <p>This is a purely <b>syntactic</b> translation; {@code E} is never typechecked.
  * <ul>
  *   <li>A global variable is written {@code name$id} and becomes
- *       {@code EVar (GlobalVar name id EGoal nothingE)}; existence is not checked, so globals never
+ *       {@code EVar (GlobalVar name id EGoal nothing)}; existence is not checked, so globals never
  *       fail.</li>
  *   <li>Any other name is a local; it must be bound by an enclosing {@code \lam}/{@code \Pi}/{@code \Sigma}
  *       in {@code E} (otherwise it is an error). Its {@code index} is its de Bruijn <b>level</b>
@@ -98,7 +98,7 @@ public class QuotMeta implements MetaResolver {
   static final int HL_INF = 211;
   // Variant tags for encoded sub-structures. Each is decoded by a dedicated decoder, so the small
   // tag spaces below may overlap with one another and with the node tags above.
-  //   MaybeExpr: nothing = a bare number; just = (JUST, enc).
+  //   Maybe Expr: nothing = a bare number; just = (JUST, enc).
   static final int JUST = 1;
   //   LetPattern: LPName = (LP_NAME, name, level); LPTuple = (LP_TUPLE, chain).
   static final int LP_NAME = 0;
@@ -495,7 +495,7 @@ public class QuotMeta implements MetaResolver {
       return factory.tuple(List.of(tag(ETFIN), enc(seq.get(1).getExpression(), ctx)));
     }
 
-    // MaybeExpr: nothing (null) -> a bare marker; just -> (JUST, enc).
+    // Maybe Expr: nothing (null) -> a bare marker; just -> (JUST, enc).
     private @Nullable ConcreteExpression encMaybe(@Nullable ConcreteExpression e, Ctx ctx) {
       if (e == null) {
         return tag(NIL);
@@ -658,7 +658,7 @@ public class QuotMeta implements MetaResolver {
       return tag(EGOAL);
     }
 
-    // A case clause: cClause (Array Pattern, MaybeExpr body). Pattern variables bind locals for the body.
+    // A case clause: cClause (Array Pattern, Maybe Expr body). Pattern variables bind locals for the body.
     private @Nullable ConcreteExpression encCaseClause(Concrete.FunctionClause fc, Ctx ctx) {
       Ctx[] cur = { ctx };
       List<ConcreteExpression> patEncs = new ArrayList<>();

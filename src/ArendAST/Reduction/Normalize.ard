@@ -19,9 +19,9 @@
 \func substVArray (vs : Array Var) (v : Var) (e : Expr) : Array Var =>
   map (\case __ \with {
     | GlobalVar VName VId VType VEvaluation => GlobalVar VName VId (substitute VType v e)
-        (MaybeExpr.map (\lam x => substitute x v e) VEvaluation)
+        (Maybe.map (\lam x => substitute x v e) VEvaluation)
     | LocalVar VName index VType VEvaluation => LocalVar VName index (substitute VType v e)
-        (MaybeExpr.map (\lam x => substitute x v e) VEvaluation)
+        (Maybe.map (\lam x => substitute x v e) VEvaluation)
   }) vs
 
 \func beta (e : Expr) : Expr => compClosure step e \where {
@@ -39,8 +39,8 @@
 
 \func delta (e : Expr) : Expr => compClosure step e \where {
   \func step (e : Expr) : Expr \elim e
-    | EVar (LocalVar _ _ _ (justE e)) => e
-    | EVar (GlobalVar _ _ _ (justE e)) => e
+    | EVar (LocalVar _ _ _ (just e)) => e
+    | EVar (GlobalVar _ _ _ (just e)) => e
     | t => t
 }
 
@@ -77,12 +77,12 @@
   mapM (\case __ \with {
     | GlobalVar VName VId VType VEvaluation => do {
       \lam vt => normalize VType,
-      \lam ve => MaybeExpr.mapM normalize VEvaluation,
+      \lam ve => mapMaybeM normalize VEvaluation,
       return $ GlobalVar VName VId vt ve
     }
     | LocalVar VName index VType VEvaluation => do {
       \lam vt => normalize VType,
-      \lam ve => MaybeExpr.mapM normalize VEvaluation,
+      \lam ve => mapMaybeM normalize VEvaluation,
       return $ LocalVar VName index vt ve
     }
   }) vs

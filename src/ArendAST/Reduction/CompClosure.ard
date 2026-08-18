@@ -3,10 +3,11 @@
 \import Data.Array
 \import Data.Bool
 \import Function.Meta
+\import Data.Maybe
 
-\func closureMaybe (f : Expr -> Expr) (e : MaybeExpr) : MaybeExpr \elim e
-  | nothingE => nothingE
-  | justE e => justE $ f (closure f e)
+\func closureMaybe (f : Expr -> Expr) (e : Maybe Expr) : Maybe Expr \elim e
+  | nothing => nothing
+  | just e => just $ f (closure f e)
 
 \func closureVar (f : Expr -> Expr) (e : Var) : Var \elim e
   | GlobalVar VName VId VType VEvaluation => GlobalVar VName VId (f (closure f VType)) (closureMaybe f VEvaluation)
@@ -26,9 +27,9 @@
   | IntervalMatch nparams a fallback =>
     IntervalMatch nparams (mkArray (\lam i => (closureMaybe f (a i).1, closureMaybe f (a i).2))) (closureMaybeMatch f fallback)
 
-\func closureMaybeMatch (f : Expr -> Expr) (e : MaybeMatch) : MaybeMatch \elim e
-  | justM m => justM $ closureMatch f m
-  | nothingM => nothingM
+\func closureMaybeMatch (f : Expr -> Expr) (e : Maybe Match) : Maybe Match \elim e
+  | just m => just $ closureMatch f m
+  | nothing => nothing
 
 \func closureLetClause (f : Expr -> Expr) (e : LetClause) : LetClause \elim e
   | cLetClause name body type isSFunc => cLetClause name (f (closure f body)) (closureMaybe f type) isSFunc
