@@ -64,17 +64,18 @@ public class QuotBuild extends BaseMetaDefinition {
   @Dependency ArendRef PVar;
   @Dependency ArendRef PConstr;
   @Dependency ArendRef PAbsurd;
-  // Sort / levels
+  // Sort / levels (Arend 1.12: PLevel / HLevel)
   @Dependency ArendRef Sort;
   @Dependency(name = "Sort.lp") ArendRef lp;
   @Dependency(name = "Sort.lh") ArendRef lh;
-  @Dependency ArendRef LMax;
-  @Dependency ArendRef LInfinity;
-  @Dependency ArendRef LP;
-  @Dependency ArendRef LH;
+  @Dependency ArendRef PLConst;
+  @Dependency ArendRef PLVar;
+  @Dependency ArendRef PLSuc;
+  @Dependency ArendRef PLMax;
+  @Dependency ArendRef PLInf;
+  @Dependency ArendRef HLFin;
+  @Dependency ArendRef HLInf;
   // stdlib
-  @Dependency ArendRef nothing;
-  @Dependency ArendRef just;
   @Dependency(name = "true") ArendRef trueRef;
   @Dependency(name = "false") ArendRef falseRef;
 
@@ -97,26 +98,35 @@ public class QuotBuild extends BaseMetaDefinition {
       return args.length == 0 ? head : factory.app(head, true, args);
     }
 
-    // A Sort is encoded as (lpLevel, lhLevel); build `\new Sort { | lp => .. | lh => .. }`.
+    // A Sort is encoded as (pLevel, hLevel); build `\new Sort { | lp => .. | lh => .. }`.
     private ConcreteExpression decSort(ConcreteExpression e) {
       List<? extends ConcreteExpression> fs = ((ConcreteTupleExpression) e).getFields();
       return factory.newExpr(factory.classExt(factory.ref(Sort),
-          factory.implementation(lp, decLevel(fs.get(0))),
-          factory.implementation(lh, decLevel(fs.get(1)))));
+          factory.implementation(lp, decPLevel(fs.get(0))),
+          factory.implementation(lh, decHLevel(fs.get(1)))));
     }
 
-    // A level: a bare number -> LInfinity; (LVL_MAX, varTag, offset, constant) -> LMax var offset constant.
-    private ConcreteExpression decLevel(ConcreteExpression e) {
+    // A p-level tuple -> the matching PLevel constructor.
+    private ConcreteExpression decPLevel(ConcreteExpression e) {
       if (!(e instanceof ConcreteTupleExpression t)) {
-        return con(LInfinity);
+        return con(PLInf);
       }
       List<? extends ConcreteExpression> fs = t.getFields();
-      ConcreteExpression var = switch (intOf(fs.get(1))) {
-        case 1 -> con(just, con(LP));
-        case 2 -> con(just, con(LH));
-        default -> con(nothing);
+      return switch (intOf(fs.get(0))) {
+        case QuotMeta.PL_CONST -> con(PLConst, fs.get(1));
+        case QuotMeta.PL_VAR -> con(PLVar, fs.get(1));
+        case QuotMeta.PL_SUC -> con(PLSuc, decPLevel(fs.get(1)));
+        case QuotMeta.PL_MAX -> con(PLMax, decPLevel(fs.get(1)), decPLevel(fs.get(2)));
+        default -> con(PLInf);
       };
-      return con(LMax, var, fs.get(2), fs.get(3));
+    }
+
+    // An h-level: (HL_FIN, int) -> HLFin int; a bare number -> HLInf.
+    private ConcreteExpression decHLevel(ConcreteExpression e) {
+      if (e instanceof ConcreteTupleExpression t) {
+        return con(HLFin, t.getFields().get(1));
+      }
+      return con(HLInf);
     }
 
     private int intOf(ConcreteExpression e) {

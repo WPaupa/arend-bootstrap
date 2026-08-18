@@ -218,7 +218,7 @@
       | _ => throw (ErrNotPi tf)
     }
   }
-  | EInterval => return (EUniv (hType level0))
+  | EInterval => return (EUniv (Type level0))
   | ECase isSFunc params retType returnLevel m args => do {
     forEachIndexM args.len (\lam i => do {
       \lam ti => typecheck (args i),
@@ -246,8 +246,9 @@
   }
   | EPEval e => typecheck e
   | EUniv s => \case s.lp \with {
-    | LInfinity => throw ErrInfinityUniverse
-    | LMax _ _ _ => return (EUniv (succSort s))
+    | PLConst n => return $ EUniv $ \new Sort { | lp => PLConst (suc n) | lh => s.lh}
+    | PLInf => throw ErrInfinityUniverse
+    | _ => return $ EUniv $ \new Sort { | lp => PLSuc s.lp | lh => s.lh}
   }
   | EPiType params cod s => do {
     forEachIndexM params.len (\lam i => localT (extendArray (take i params (linarith (fin_< i)))) (typecheckVar (params i))),

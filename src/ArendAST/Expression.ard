@@ -45,21 +45,21 @@
   | EProj Expr Nat (isProperty : Bool)
 
   -- Calls
-  | EFunCall Var LevelArgs (Array Expr)
-  | EConsCall Var LevelArgs (typeArgs : Array Expr) (consArgs : Array Expr)
-  | EDataCall Var LevelArgs (Array Expr)
+  | EFunCall Var (Array PLevel) (Array Expr)
+  | EConsCall Var (Array PLevel) (typeArgs : Array Expr) (consArgs : Array Expr)
+  | EDataCall Var (Array PLevel) (Array Expr)
   | EFieldCall Var Expr
-  | EClassCall Var LevelArgs (implementations : Array Var) Sort Var
+  | EClassCall Var (Array PLevel) (implementations : Array Var) Sort Var
   -- a Var in implementations is always global, refers to the name of the field, and always carries an evaluation
 
   -- Records
   | ENew (parent : MaybeExpr) Expr
 
   -- Arrays
-  | EArray LevelArgs (elemType : Expr) (elems : Array Expr) (tail : MaybeExpr)
+  | EArray (Array PLevel) (elemType : Expr) (elems : Array Expr) (tail : MaybeExpr)
 
   -- Paths
-  | EPath LevelArgs Expr Expr
+  | EPath (Array PLevel) Expr Expr
   | EPathAt Expr Expr
 
   -- Patterns
@@ -82,7 +82,7 @@
   | EInterval
   | EArrayType (len : Expr) (elemType : Expr)
   -- \type synonym
-  | EType (type : Var) LevelArgs (clauseNo : Int) (args : Array Expr) (underlying : Expr)
+  | EType (type : Var) (Array PLevel) (clauseNo : Int) (args : Array Expr) (underlying : Expr)
   | ETypeDestr (type : Var) Expr
 
   -- Errors

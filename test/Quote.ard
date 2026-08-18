@@ -119,8 +119,8 @@
 \func sortSet : Expr => quot { \Set 3 }
 \func sortSet_p => println sortSet
 
--- \func sortLevelVar.{l} : Expr => quot { \Type l }
--- \func sortLevelVar_p => println sortLevelVar.{0}
+\func sortLevelVar.{l} : Expr => quot { \Type l }
+\func sortLevelVar_p => println sortLevelVar.{0}
 
 -- a \Pi/\Sigma sort can be given by an ascribed universe
 \func piSort : Expr => quot { \Pi (x : A$1) -> B$2 x : \5-Type 0 }

@@ -1,40 +1,16 @@
-\import Arith.Int
 \import Data.Maybe
 
-\data LevelType
-  | PLevel
-  | HLevel
+\data PLevel | PLConst Nat | PLVar Nat {- index into the definition's level params -}
+  | PLSuc PLevel | PLMax PLevel PLevel | PLInf
 
-\data LevelVar
-  | LP
-  | LH
-  | NamedLVar LevelType String Int Int
-  | InferLVar LevelType
+\data HLevel | HLFin Int -- -1 = \Prop, 0 = \Set, k = \k-Type
+  | HLInf -- \Type
+\record Sort | lp : PLevel | lh : HLevel
 
-\data Level
-  | LMax (v : Maybe LevelVar) (offset : Int) (constant : Int) -- max (v + offset, constant)
-  | LInfinity
+\type LevelSubst => Array (\Sigma Nat PLevel)
 
-\record Sort {
-  | lp : Level
-  | lh : Level
-}
-
-\data LevelArgs
-  | LArgPair Sort
-  | LArgList (Array Level)
-  | LArgEmpty
-
-\type LevelSubst => Array (\Sigma LevelVar Level)
-
-\func level0 => LMax nothing 0 0
-\func Prop => \new Sort { | lp => level0 | lh => LMax nothing 0 -1}
-\func Set (l : Level) => \new Sort { | lp => l | lh => level0}
-\func hType (l : Level) => \new Sort { | lp => l | lh => LInfinity}
+\func level0 => PLConst 0
+\func Prop => \new Sort { | lp => level0 | lh => HLFin -1}
+\func Set (l : PLevel) => \new Sort { | lp => l | lh => HLFin 0}
+\func Type (l : PLevel) => \new Sort { | lp => l | lh => HLInf}
 \func Set0 : Sort => Set level0
-\func stdLevel => \new Sort { | lp => LMax (just LP) 0 0 | lh => LMax (just LH) 0 0}
-
-\func succLevel (l : Level) : Level \elim l
-  | LInfinity  => LInfinity
-  | LMax v o c => LMax v (isuc o) (isuc c)
-\func succSort (s : Sort) : Sort => \new Sort { | lp => succLevel s.lp | lh => succLevel s.lh }

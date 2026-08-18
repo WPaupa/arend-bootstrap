@@ -15,7 +15,7 @@
   | ErrArity Nat Nat                    -- expected spine length, actual
   | ErrBadPattern
   | ErrNonAbsurd
-  | ErrLevelParam LevelVar
+  | ErrLevelParam
   | ErrUnify
   | ErrOutOfFuel
   | ErrIntervalMatch

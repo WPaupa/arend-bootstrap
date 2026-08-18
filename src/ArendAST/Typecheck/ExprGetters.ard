@@ -194,7 +194,7 @@
 
 \func patternToExpr (p : Pattern) : Expr \elim p
   | PVar v            => EVar v
-  | PConstr cv subpats => EConsCall cv LArgEmpty nil (mkArray (\lam i => patternToExpr (subpats i)))
+  | PConstr cv subpats => EConsCall cv nil nil (mkArray (\lam i => patternToExpr (subpats i)))
   | PAbsurd           => EGoal
 
 \func patIsAbsurd (p : Pattern) : Bool \elim p

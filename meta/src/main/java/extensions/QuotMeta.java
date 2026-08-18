@@ -86,10 +86,16 @@ public class QuotMeta implements MetaResolver {
   // single tuple, because a one-element tuple `(x)` collapses to `x` in Arend concrete syntax.
   static final int NIL = 100;
   static final int CONS = 101;
-  //   Level: LInfinity = a bare number; LMax = (LVL_MAX, varTag, offset, constant) with
-  //   varTag 0 = nothing, 1 = LP, 2 = LH. A Sort is encoded as (lpLevel, lhLevel).
-  static final int LVL_INF = 200;
-  static final int LVL_MAX = 201;
+  //   PLevel (Arend 1.12): PLConst = (PL_CONST, n); PLVar = (PL_VAR, index); PLSuc = (PL_SUC, plevel);
+  //   PLMax = (PL_MAX, plevel, plevel); PLInf = (PL_INF). HLevel: HLFin = (HL_FIN, int); HLInf = a
+  //   bare number. A Sort is encoded as (pLevel, hLevel).
+  static final int PL_CONST = 200;
+  static final int PL_VAR = 201;
+  static final int PL_SUC = 202;
+  static final int PL_MAX = 203;
+  static final int PL_INF = 204;
+  static final int HL_FIN = 210;
+  static final int HL_INF = 211;
   // Variant tags for encoded sub-structures. Each is decoded by a dedicated decoder, so the small
   // tag spaces below may overlap with one another and with the node tags above.
   //   MaybeExpr: nothing = a bare number; just = (JUST, enc).
@@ -204,46 +210,39 @@ public class QuotMeta implements MetaResolver {
       return factory.tuple(List.of(tag(global ? 1 : 0), factory.string(name), key, type));
     }
 
-    // === sorts / levels ===
-    // Analyze a level expression into {infFlag, varTag, offset, constant}, or null if too complex.
-    // Since Arend 1.12 there are no `\lp`, `\lh` and `\oo` level expressions, so varTag is always 0
-    // here; the LP/LH encoding is kept because the AST (ArendAST.Level) still has those variables.
-    private int @Nullable [] analyzeLevel(Concrete.LevelExpression le) {
-      if (le instanceof Concrete.NumberLevelExpression n) {
-        Integer c = toInt(n.getNumber());
-        return c == null ? null : new int[] { 0, 0, 0, c };
-      }
-      if (le instanceof Concrete.SucLevelExpression suc) {
-        int[] a = analyzeLevel(suc.getExpression());
-        if (a == null) {
-          return null;
-        }
-        return a[0] == 1 ? a : new int[] { 0, a[1], a[2] + 1, a[3] + 1 };
-      }
-      // \max and named/inference level variables are not represented.
-      return null;
-    }
-
+    // === sorts / levels (Arend 1.12: PLevel / HLevel) ===
     // Levels are small in practice; anything that does not fit into an int is treated as too complex.
     private @Nullable Integer toInt(BigInteger n) {
       return n.bitLength() < 32 ? n.intValue() : null;
     }
 
-    private ConcreteExpression encLevelOf(int[] a) {
-      return a[0] == 1 ? tag(LVL_INF) : factory.tuple(List.of(tag(LVL_MAX), tag(a[1]), factory.number(a[2]), factory.number(a[3])));
-    }
-
-    // A level in the p (predicative) position; the default (no level, or one too complex) is 0.
+    // A p-level, mirroring the PLevel data type. A missing level, or one too large to fit an int, is
+    // treated as the constant 0.
     private ConcreteExpression encPLevel(@Nullable Concrete.LevelExpression le) {
-      int[] a = le == null ? null : analyzeLevel(le);
-      return encLevelOf(a == null ? new int[] { 0, 0, 0, 0 } : a);
+      if (le instanceof Concrete.NumberLevelExpression n) {
+        Integer c = toInt(n.getNumber());
+        return factory.tuple(List.of(tag(PL_CONST), factory.number(c == null ? 0 : c)));
+      }
+      if (le instanceof Concrete.SucLevelExpression suc) {
+        return factory.tuple(List.of(tag(PL_SUC), encPLevel(suc.getExpression())));
+      }
+      if (le instanceof Concrete.MaxLevelExpression max) {
+        return factory.tuple(List.of(tag(PL_MAX), encPLevel(max.getLeft()), encPLevel(max.getRight())));
+      }
+      if (le instanceof Concrete.VarLevelExpression) {
+        // A named level parameter (e.g. the `l` in `\Type l`). Its index into the definition's level
+        // parameters is not recoverable syntactically here, so use 0 (the common single-param case).
+        return factory.tuple(List.of(tag(PL_VAR), factory.number(0)));
+      }
+      // Null, or any level expression we do not model: default to the constant 0.
+      return factory.tuple(List.of(tag(PL_CONST), factory.number(0)));
     }
 
     // Since Arend 1.12 the h-level of a universe is a plain number (`\Set` is 0, `\Prop` is -1);
-    // no number means `\Type`, i.e. inf, which is also the default.
+    // no number means `\Type`, i.e. HLInf, which is also the default.
     private ConcreteExpression encHLevel(@Nullable BigInteger h) {
       Integer c = h == null ? null : toInt(h);
-      return encLevelOf(c == null ? new int[] { 1, 0, 0, 0 } : new int[] { 0, 0, 0, c });
+      return c == null ? tag(HL_INF) : factory.tuple(List.of(tag(HL_FIN), factory.number(c)));
     }
 
     private ConcreteExpression defaultSortEnc() {
