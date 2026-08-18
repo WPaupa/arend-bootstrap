@@ -110,7 +110,7 @@
 \func ascApp_p => println ascApp
 
 -- a universe's sort comes from its explicit levels
-\func sortNum : Expr => quot { \Type 0 1 }
+\func sortNum : Expr => quot { \1-Type 0 }
 \func sortNum_p => println sortNum
 
 \func sortProp : Expr => quot { \Prop }
@@ -119,9 +119,9 @@
 \func sortSet : Expr => quot { \Set 3 }
 \func sortSet_p => println sortSet
 
-\func sortLpLh : Expr => quot { \Type \lp \lh }
-\func sortLpLh_p => println sortLpLh
+-- \func sortLevelVar.{l} : Expr => quot { \Type l }
+-- \func sortLevelVar_p => println sortLevelVar.{0}
 
 -- a \Pi/\Sigma sort can be given by an ascribed universe
-\func piSort : Expr => quot { \Pi (x : A$1) -> B$2 x : \Type 0 5 }
+\func piSort : Expr => quot { \Pi (x : A$1) -> B$2 x : \5-Type 0 }
 \func piSort_p => println piSort

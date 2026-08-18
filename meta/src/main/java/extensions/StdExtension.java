@@ -15,7 +15,6 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Collections;
 
 import static org.arend.ext.prettyprinting.doc.DocFactory.multiline;
-import static org.arend.ext.prettyprinting.doc.DocFactory.text;
 
 /**
  * The main extension class of the arend-bootstrap library. It declares the metas provided by the
@@ -35,7 +34,7 @@ public class StdExtension implements ArendExtension {
     ModulePath module = new ModulePath("Monad", "Do");
     MetaDefinition doMeta = new DoMeta();
     MetaRef ref = factory.metaRef(factory.moduleRef(module), "do", Precedence.DEFAULT, null, null,
-        (MetaResolver) doMeta, new TrivialMetaTypechecker(doMeta));
+            (MetaResolver) doMeta, new TrivialMetaTypechecker(doMeta));
     contributor.declare(multiline("""
         `do { s_1, ... s_n }` is do-notation for monads (see `Utilities.Monad`).
 
@@ -59,7 +58,7 @@ public class StdExtension implements ArendExtension {
     QuotBuild quotBuild = new QuotBuild();
     DependencyMetaTypechecker quotTypechecker = new DependencyMetaTypechecker(QuotBuild.class, () -> quotBuild);
     MetaRef quotRef = factory.metaRef(factory.moduleRef(quoteModule), "quot", Precedence.DEFAULT, null, null,
-        new QuotMeta(), quotTypechecker);
+            new QuotMeta(), quotTypechecker);
     contributor.declare(multiline("""
         `quot { E }` reifies the surface syntax of `E` into a value of the core AST `Expr` (see `ArendAST.Expression`).
 

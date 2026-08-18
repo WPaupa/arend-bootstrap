@@ -23,7 +23,7 @@
   | ErrFieldDuplicate Var               -- a field is implemented more than once
   | ErrFieldMissing Nat                 -- a required field id is not implemented
 
-\data Result (A : \Type)
+\data Result (A : \Set0)
   | ok A
   | err CheckError
 
@@ -32,7 +32,7 @@
   | >>= r f  => \case r \with { | ok a => f a | err e => err e }
 
 \func Env (A : \Set0) : \Set0 => ReaderT CheckEnv Result A
-\func throw {A : \Set0} (e : CheckError) : Env A => liftReader (err e)
+\func throw {A : \Set0} (e : CheckError) : Env A => liftReader (err {A} e)
 
 \func \infixl 1 >>> {A B : \Set0} (c1 : Env A) (c2 : Env B) : Env (\Sigma) \cowith
   | runReaderT env => \case c1.runReaderT env \with {

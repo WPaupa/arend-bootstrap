@@ -27,9 +27,9 @@
 }
 
 \func combK : Expr => quot { (
-  (\lam (A : \Type 5 7) (x : A) (_ : A) => x),
+  (\lam (A : \7-Type 5) (x : A) (_ : A) => x),
   (x$0 : \Prop)
-) : \Sigma (u : \Pi (A : \Type 0 0) (x : A) (y : A) -> A) (v : \oo-Type 0)}
+) : \Sigma (u : \Pi (A : \Set0) (x : A) (y : A) -> A) (v : \Type 0)}
 
 \func typecheckK_p => println
     ((typecheck combK).runReaderT

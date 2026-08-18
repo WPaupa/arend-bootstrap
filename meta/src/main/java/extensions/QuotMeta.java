@@ -4,8 +4,6 @@ import org.arend.ext.concrete.ConcreteFactory;
 import org.arend.ext.concrete.ConcreteParameter;
 import org.arend.ext.concrete.expr.ConcreteArgument;
 import org.arend.ext.concrete.expr.ConcreteExpression;
-import org.arend.ext.concrete.expr.ConcreteGoalExpression;
-import org.arend.ext.concrete.expr.ConcreteHoleExpression;
 import org.arend.ext.concrete.expr.ConcreteLamExpression;
 import org.arend.ext.concrete.expr.ConcreteNumberExpression;
 import org.arend.ext.concrete.expr.ConcretePiExpression;
@@ -14,7 +12,6 @@ import org.arend.ext.concrete.expr.ConcreteSigmaExpression;
 import org.arend.ext.concrete.expr.ConcreteStringExpression;
 import org.arend.ext.concrete.expr.ConcreteTupleExpression;
 import org.arend.ext.concrete.expr.ConcreteTypedExpression;
-import org.arend.ext.concrete.expr.ConcreteUniverseExpression;
 import org.arend.ext.error.NameResolverError;
 import org.arend.ext.reference.ArendRef;
 import org.arend.ext.reference.ExpressionResolver;
@@ -25,6 +22,7 @@ import org.arend.term.concrete.Concrete;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -208,18 +206,12 @@ public class QuotMeta implements MetaResolver {
 
     // === sorts / levels ===
     // Analyze a level expression into {infFlag, varTag, offset, constant}, or null if too complex.
+    // Since Arend 1.12 there are no `\lp`, `\lh` and `\oo` level expressions, so varTag is always 0
+    // here; the LP/LH encoding is kept because the AST (ArendAST.Level) still has those variables.
     private int @Nullable [] analyzeLevel(Concrete.LevelExpression le) {
-      if (le instanceof Concrete.PLevelExpression) {
-        return new int[] { 0, 1, 0, 0 };
-      }
-      if (le instanceof Concrete.HLevelExpression) {
-        return new int[] { 0, 2, 0, 0 };
-      }
-      if (le instanceof Concrete.InfLevelExpression) {
-        return new int[] { 1, 0, 0, 0 };
-      }
       if (le instanceof Concrete.NumberLevelExpression n) {
-        return new int[] { 0, 0, 0, n.getNumber() };
+        Integer c = toInt(n.getNumber());
+        return c == null ? null : new int[] { 0, 0, 0, c };
       }
       if (le instanceof Concrete.SucLevelExpression suc) {
         int[] a = analyzeLevel(suc.getExpression());
@@ -232,25 +224,34 @@ public class QuotMeta implements MetaResolver {
       return null;
     }
 
+    // Levels are small in practice; anything that does not fit into an int is treated as too complex.
+    private @Nullable Integer toInt(BigInteger n) {
+      return n.bitLength() < 32 ? n.intValue() : null;
+    }
+
     private ConcreteExpression encLevelOf(int[] a) {
       return a[0] == 1 ? tag(LVL_INF) : factory.tuple(List.of(tag(LVL_MAX), tag(a[1]), factory.number(a[2]), factory.number(a[3])));
     }
 
-    // A level in the p (predicative) or h (homotopy) position; the default is 0 for p and inf for h.
-    private ConcreteExpression encLevel(@Nullable Concrete.LevelExpression le, boolean isH) {
+    // A level in the p (predicative) position; the default (no level, or one too complex) is 0.
+    private ConcreteExpression encPLevel(@Nullable Concrete.LevelExpression le) {
       int[] a = le == null ? null : analyzeLevel(le);
-      if (a == null) {
-        a = isH ? new int[] { 1, 0, 0, 0 } : new int[] { 0, 0, 0, 0 };
-      }
-      return encLevelOf(a);
+      return encLevelOf(a == null ? new int[] { 0, 0, 0, 0 } : a);
+    }
+
+    // Since Arend 1.12 the h-level of a universe is a plain number (`\Set` is 0, `\Prop` is -1);
+    // no number means `\Type`, i.e. inf, which is also the default.
+    private ConcreteExpression encHLevel(@Nullable BigInteger h) {
+      Integer c = h == null ? null : toInt(h);
+      return encLevelOf(c == null ? new int[] { 1, 0, 0, 0 } : new int[] { 0, 0, 0, c });
     }
 
     private ConcreteExpression defaultSortEnc() {
-      return factory.tuple(List.of(encLevel(null, false), encLevel(null, true)));
+      return factory.tuple(List.of(encPLevel(null), encHLevel(null)));
     }
 
     private ConcreteExpression sortFromUniverse(Concrete.UniverseExpression u) {
-      return factory.tuple(List.of(encLevel(u.getPLevel(), false), encLevel(u.getHLevel(), true)));
+      return factory.tuple(List.of(encPLevel(u.getPLevel()), encHLevel(u.getHLevel())));
     }
 
     // The sort of a type-former: taken from an ascribed universe if there is one, else the default.
@@ -335,7 +336,7 @@ public class QuotMeta implements MetaResolver {
         if (d >= 0 && isNat(name.substring(d + 1))) {
           ConcreteExpression t = ascType != null ? ascType : tag(EGOAL);
           return factory.tuple(List.of(tag(EVAR),
-              encVar(true, name.substring(0, d), factory.number(new java.math.BigInteger(name.substring(d + 1))), t)));
+                  encVar(true, name.substring(0, d), factory.number(new java.math.BigInteger(name.substring(d + 1))), t)));
         }
         Ctx entry = ctx.find(name);
         if (entry == null) {
@@ -536,8 +537,8 @@ public class QuotMeta implements MetaResolver {
         Concrete.LetClause clause = clauses.get(i);
         // Parameters of `\let f x => e` fold into a lambda body `\lam x => e`.
         ConcreteExpression body = clause.getParameters().isEmpty()
-            ? enc(clause.getTerm(), bodyCtx)
-            : binder(clause.getParameters(), clause.getTerm(), bodyCtx, ELAM, null);
+                ? enc(clause.getTerm(), bodyCtx)
+                : binder(clause.getParameters(), clause.getTerm(), bodyCtx, ELAM, null);
         if (body == null) {
           return null;
         }
@@ -631,7 +632,7 @@ public class QuotMeta implements MetaResolver {
       }
       ConcreteExpression match = factory.tuple(List.of(tag(DO_MATCH), listChain(clauseEncs)));
       return factory.tuple(List.of(tag(ECASE), tag(caseExpr.isSCase() ? 1 : 0), listChain(paramEncs),
-          retType, retLevel, match, listChain(argEncs)));
+              retType, retLevel, match, listChain(argEncs)));
     }
 
     // Is `e` the EGOAL encoding (a bare EGOAL tag)? Used to tell "no type recovered" apart from a
