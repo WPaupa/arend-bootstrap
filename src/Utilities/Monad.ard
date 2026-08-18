@@ -1,36 +1,36 @@
 \import Data.Array
 \import Data.Maybe
 
-\class Monad (M : \Set0 -> \Set0)
-  | return {A : \Set0} : A -> M A
-  | \infixl 1 >>= {A B : \Set0} : M A -> (A -> M B) -> M B
+\class Monad.{l} (M : \Set l -> \Set l)
+  | return {A : \Set l} : A -> M A
+  | \infixl 1 >>= {A B : \Set l} : M A -> (A -> M B) -> M B
 
-\func \infixl 1 >> {M : Monad} {A B : \Set0} (x : M A) (y : M B) : M B
+\func \infixl 1 >>.{l} {M : Monad.{l}} {A B : \Set l} (x : M A) (y : M B) : M B
   => x >>= \lam _ => y
 
-\func fmapM {M : Monad} {A B : \Set0} (f : A -> B) (x : M A) : M B
+\func fmapM.{l} {M : Monad.{l}} {A B : \Set l} (f : A -> B) (x : M A) : M B
   => x >>= \lam a => return (f a)
 
-\func forEachM {M : Monad} {A B : \Set0} (f : A -> M B) (xs : Array A) : M (\Sigma) \elim xs
+\func forEachM.{l} {M : Monad.{l}} {A B : \Set l} (f : A -> M B) (xs : Array A) : M (\Sigma) \elim xs
   | nil     => return ()
   | x :: xs => f x >> forEachM f xs
 
-\func forEachIndexM {M : Monad} {A : \Set0} (n : Nat) (f : Fin n -> M A) : M (\Sigma) \elim n
+\func forEachIndexM.{l} {M : Monad.{l}} {A : \Set l} (n : Nat) (f : Fin n -> M A) : M (\Sigma) \elim n
   | 0     => return ()
   | suc n => f 0 >> forEachIndexM n (\lam i => f (suc i))
 
-\func mapM {M : Monad} {A B : \Set0} (f : A -> M B) (xs : Array A) : M (Array B) \elim xs
+\func mapM.{l} {M : Monad.{l}} {A B : \Set l} (f : A -> M B) (xs : Array A) : M (Array B) \elim xs
   | nil     => return nil
   | x :: xs => f x >>= \lam y => mapM f xs >>= \lam ys => return (y :: ys)
 
-\func mapMaybeM {M : Monad} {A B : \Set0} (f : A -> M B) (x : Maybe A) : M (Maybe B) \elim x
+\func mapMaybeM.{l} {M : Monad.{l}} {A B : \Set l} (f : A -> M B) (x : Maybe A) : M (Maybe B) \elim x
   | just m => fmapM just (f m)
   | nothing => return nothing
 
-\func foldM {M : Monad} {A B : \Set0} (f : B -> A -> M B) (acc : B) (xs : Array A) : M B \elim xs
+\func foldM.{l} {M : Monad.{l}} {A B : \Set l} (f : B -> A -> M B) (acc : B) (xs : Array A) : M B \elim xs
   | nil => return acc
   | a :: as => f acc a >>= \lam fa => foldM f fa as
 
-\func foldIndexM {M : Monad} {A B : \Set0} (h : B -> A -> B) (acc : B) (n : Nat) (f : Fin n -> M A) : M B \elim n
+\func foldIndexM.{l} {M : Monad.{l}} {A B : \Set l} (h : B -> A -> B) (acc : B) (n : Nat) (f : Fin n -> M A) : M B \elim n
   | 0     => return acc
   | suc n => f 0 >>= \lam x => foldIndexM h (h acc x) n (\lam i => f (suc i))

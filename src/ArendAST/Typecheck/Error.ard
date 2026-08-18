@@ -23,18 +23,18 @@
   | ErrFieldDuplicate Var               -- a field is implemented more than once
   | ErrFieldMissing Nat                 -- a required field id is not implemented
 
-\data Result (A : \Set0)
+\data Result.{l} (A : \Set l)
   | ok A
   | err CheckError
 
-\instance ResultMonad : Monad Result
+\instance ResultMonad.{l} : Monad Result.{l}
   | return a => ok a
   | >>= r f  => \case r \with { | ok a => f a | err e => err e }
 
-\func Env (A : \Set0) : \Set0 => ReaderT CheckEnv Result A
-\func throw {A : \Set0} (e : CheckError) : Env A => liftReader (err {A} e)
+\func Env.{l} (A : \Set l) : \Set l => ReaderT CheckEnv Result A
+\func throw.{l} {A : \Set l} (e : CheckError) : Env A => liftReader (err {A} e)
 
-\func \infixl 1 >>> {A B : \Set0} (c1 : Env A) (c2 : Env B) : Env (\Sigma) \cowith
+\func \infixl 1 >>>.{l} {A B : \Set l} (c1 : Env A) (c2 : Env B) : Env (\Sigma) \cowith
   | runReaderT env => \case c1.runReaderT env \with {
     | ok _ => \case c2.runReaderT env \with {
       | ok _ => ok ()
