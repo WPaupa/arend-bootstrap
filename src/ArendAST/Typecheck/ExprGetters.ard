@@ -49,9 +49,15 @@
   | t => nothing
 
 \func getArrayType (_ : Expr) : Maybe (\Sigma Expr Expr)
-  | EArrayType len elems => just (len, elems)
-  | EVar (GlobalVar _ _ _ (just (EArrayType len elems))) => just (len, elems)
-  | EVar (LocalVar _ _ _ (just (EArrayType len elems))) => just (len, elems)
+  | ETArray pls len elems => just (len, elems)
+  | EVar (GlobalVar _ _ _ (just (ETArray pls len elems))) => just (len, elems)
+  | EVar (LocalVar _ _ _ (just (ETArray pls len elems))) => just (len, elems)
+  | t => nothing
+
+\func getFinType (_ : Expr) : Maybe Expr
+  | ETFin max => just max
+  | EVar (GlobalVar _ _ _ (just (ETFin max))) => just max
+  | EVar (LocalVar _ _ _ (just (ETFin max))) => just max
   | t => nothing
 
 \func projComponentType (vs : Array Var) (body : Maybe Expr) (k i : Nat) : Expr \elim vs, i
@@ -102,9 +108,14 @@
   }
 
 \func patternVars (p : Pattern) : Array Var \elim p
-  | PVar v            => v :: nil
+  | PVar v => v :: nil
   | PConstr _ subpats => concatIdx subpats.len (\lam i => patternVars (subpats i))
-  | PAbsurd           => nil
+  | PSuc p => patternVars p
+  | PFSuc _ p => patternVars p
+  | PPos p => patternVars p
+  | PNeg p => patternVars p
+  | PCons _ _ p1 p2 => patternVars p1 ++ patternVars p2
+  | _ => nil
 
 \func patternArrayVars (ps : Array Pattern) : Array Var => concatIdx ps.len (\lam i => patternVars (ps i))
 
@@ -196,10 +207,24 @@
   | PVar v            => EVar v
   | PConstr cv subpats => EConsCall cv nil nil (mkArray (\lam i => patternToExpr (subpats i)))
   | PAbsurd           => EGoal
+  | PZero => ENat 0
+  | PFZero max => EFin (ECSuc max) (ENat 0)
+  | PSuc p => ECSuc (patternToExpr p)
+  | PFSuc max p => ECFSuc (ECSuc max) (patternToExpr p)
+  | PPos p => ECPos (patternToExpr p)
+  | PNeg p => ECNeg (patternToExpr p)
+  | PNil pl t => EArray pl t nil nothing
+  | PCons pl t p1 p2 => EArray pl t (patternToExpr p1 :: nil) (just $ patternToExpr p2)
+  | PIdp pl t v => EPath pl t (ELam (LocalVar "_" 0 EInterval nothing :: nil) (EVar v) (Type level0)) -- FUTURE: correct sort
 
 \func patIsAbsurd (p : Pattern) : Bool \elim p
-  | PVar _            => false
-  | PAbsurd           => true
+  | PAbsurd => true
   | PConstr _ subpats => anyIdx subpats.len (\lam i => patIsAbsurd (subpats i))
+  | PSuc p => patIsAbsurd p
+  | PFSuc _ p => patIsAbsurd p
+  | PPos p => patIsAbsurd p
+  | PNeg p => patIsAbsurd p
+  | PCons _ _ p1 p2 => patIsAbsurd p1 or patIsAbsurd p2
+  | _ => false
 
 \func patsAnyAbsurd (ps : Array Pattern) : Bool => anyIdx ps.len (\lam i => patIsAbsurd (ps i))

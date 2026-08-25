@@ -1,0 +1,87 @@
+\import ArendAST.Definition
+\import ArendAST.Expression
+\import ArendAST.Level
+\import ArendAST.Reduction.Normalize
+\import ArendAST.Typecheck.Env
+\import Data.Array
+\import Data.Bool
+\import Data.List (List)
+\import Data.Maybe
+\import Debug.Meta
+\import Function.Meta
+\import Utilities.Monad.Reader
+
+\func +Nat : Definition => DFunc $ \new FuncDef {
+  | name => "+"
+  | id => 1002
+  | params => x :: y :: nil
+  | resultType => ETNat
+  | resultSort => Set0
+  | truncLevel => nothing
+  | body => just $ DoMatch $
+                   cClause (PZero :: PVar z :: nil) (just $ EVar z) ::
+                   cClause (PSuc (PVar t) :: PVar z :: nil) (just $ ECSuc (EFunCall +NatV nil (EVar t :: EVar z :: nil))) :: nil
+  | isSFunc => false
+} \where {
+  \func x => LocalVar "x" 0 ETNat nothing
+  \func y => LocalVar "y" 1 ETNat nothing
+  \func z => LocalVar "z" 2 ETNat nothing
+  \func t => LocalVar "t" 3 ETNat nothing
+}
+\func +NatV : Var => GlobalVar "+" 1002 (EPiType (+Nat.x :: +Nat.y :: nil) ETNat Set0) nothing
+
+\func *Nat : Definition => DFunc $ \new FuncDef {
+  | name => "*"
+  | id => 1003
+  | params => x :: y :: nil
+  | resultType => ETNat
+  | resultSort => Set0
+  | truncLevel => nothing
+  | body => just $ DoMatch $
+                   cClause (PZero :: PVar z :: nil) (just $ ENat 0) ::
+                   cClause (PSuc (PVar t) :: PVar z :: nil)
+                       (just $ EFunCall +NatV nil $ EVar z :: EFunCall *NatV nil (EVar t :: EVar z :: nil) :: nil) :: nil
+  | isSFunc => false
+} \where {
+  \func x => LocalVar "x" 0 ETNat nothing
+  \func y => LocalVar "y" 1 ETNat nothing
+  \func z => LocalVar "z" 2 ETNat nothing
+  \func t => LocalVar "t" 3 ETNat nothing
+}
+\func *NatV : Var => GlobalVar "*" 1003 (EPiType (*Nat.x :: *Nat.y :: nil) ETNat Set0) nothing
+
+\func factorial : Definition => DFunc $ \new FuncDef {
+  | name => "!"
+  | id => 10001
+  | params => x :: nil
+  | resultSort => Set0
+  | resultType => ETNat
+  | truncLevel => nothing
+  | body => just $ DoMatch $
+                   cClause (PZero :: nil) (just $ ENat 1) ::
+                   cClause (PSuc (PVar y) :: nil) (just $ EFunCall *NatV nil (
+                     ECSuc (EVar y) ::
+                     EFunCall factorialV nil (EVar y :: nil) ::
+                     nil)) :: nil
+  | isSFunc => false
+} \where {
+  \func x => LocalVar "x" 0 ETNat nothing
+  \func y => LocalVar "y" 1 ETNat nothing
+}
+\func factorialV : Var => GlobalVar "!" 10001 (EPiType (factorial.x :: nil) ETNat Set0) nothing
+
+
+\func env+* : CheckEnv \cowith
+  | vars => +NatV :: *NatV :: factorialV :: nil
+  | plevels => nil
+  | defs => +Nat :: *Nat :: factorial :: nil
+
+\func two+two : Expr => EFunCall +NatV nil (ENat 2 :: ENat 2 :: nil)
+\func four_test => normalize.normalizeWithFuelR env+* two+two 0
+\func four_p => println four_test
+
+
+\func factorial2 : Expr => EFunCall factorialV nil (ENat 2 :: nil)
+\func factorial2_test => normalize.normalizeWithFuelR env+* factorial2 4
+\func factorial2_print => println factorial2_test
+

@@ -42,7 +42,7 @@
   | EPathAt Expr Expr
 
   -- Patterns
-  | ECase (isSFunc : Bool) (Array Var) (returnType : Expr) (returnLevel : Maybe Expr) Match (args : Array Expr)
+  | ECase (isSFunc : Bool) (Array Var) (returnType : Expr) (returnLevel : Array PLevel) Match (args : Array Expr)
   | ELet (isSFunc : Bool) (Array LetClause) (in : Expr)
 
   -- Wrappers
@@ -59,7 +59,7 @@
   | ETString
   | ETFin Expr
   | EInterval
-  | EArrayType (len : Expr) (elemType : Expr)
+  | ETArray (pls : Array PLevel) (len : Expr) (elemType : Expr)
   -- \type synonym
   | EType (type : Var) (Array PLevel) (clauseNo : Int) (args : Array Expr) (underlying : Expr)
   | ETypeDestr (type : Var) Expr
@@ -67,6 +67,11 @@
   -- Errors
   | EError (Maybe Expr)
   | EGoal
+  -- Constructors
+  | ECSuc Expr
+  | ECFSuc (max : Expr) Expr
+  | ECPos Expr
+  | ECNeg Expr
 
 \data Match : \Set0
   | NoMatch Expr
@@ -80,6 +85,21 @@
   | PVar Var
   | PConstr Var (Array Pattern)
   | PAbsurd
+  -- Nats / fins
+  | PZero
+  | PFZero (max : Expr)
+  | PSuc Pattern
+  | PFSuc (max : Expr) Pattern
+  -- Ints
+  | PPos Pattern
+  | PNeg Pattern
+  -- Arrays
+  | PNil (pls : Array PLevel) (elemType : Expr)
+  | PCons (pls : Array PLevel) (elemType : Expr) Pattern Pattern
+  -- Paths
+  | PIdp (pls : Array PLevel) (type : Expr) (fixedVar : Var)
+  -- fixedVar always has an evaluation.
+  -- if the type is a = f b, fixedVar can be a with evaluation f b
 
 \data LetClause : \Set0
   | cLetClause (name : LetPattern) (body : Expr) (type : Maybe Expr) (isSFunc : Bool)

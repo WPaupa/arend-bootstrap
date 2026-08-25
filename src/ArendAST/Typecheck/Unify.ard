@@ -82,7 +82,7 @@
       unifyMaybe tl tl'
     }
   }
-  | EArrayType len et, EArrayType len' et' => unify len len' >> unify et et'
+  | ETArray _ len et, ETArray _ len' et' => unify len len' >> unify et et'
   | EInterval, EInterval => return ()
   | EPath l e1 e2, EPath l' e1' e2' => unify e1 e1' >> unify e2 e2'
   | EPathAt e1 e2, EPathAt e1' e2' => unify e1 e1' >> unify e2 e2'
@@ -91,7 +91,6 @@
     | yes eq => do {
       mapM2 unifyVar ps ps',
       unify rt rt',
-      unifyMaybe rl rl',
       unifyMatch m m',
       forEachIndexM args.len (\lam i => unify (args i) (args' (rewriteI eq i)))
     }
@@ -118,6 +117,10 @@
   | ETString, ETString => return ()
   | ETNat, ETNat => return ()
   | ETFin n, ETFin m => unify n m
+  | ECSuc e1, ECSuc e2 => unify e1 e2
+  | ECFSuc m1 e1, ECFSuc m2 e2 => unify m1 m2 >> unify e1 e2
+  | ECPos e1, ECPos e2 => unify e1 e2
+  | ECNeg e1, ECNeg e2 => unify e1 e2
   | _, _ => errUni
 
 \func unifyMaybe (_ _ : Maybe Expr) : Env (\Sigma)
@@ -156,6 +159,15 @@
     | yes eq => unifyVar v v' >> forEachIndexM ps.len (\lam i => unifyPattern (ps i) (ps' (rewriteI eq i)))
   }
   | PAbsurd, PAbsurd => return ()
+  | PZero, PZero => return ()
+  | PFZero m1, PFZero m2 => unify m1 m2
+  | PSuc p1, PSuc p2 => unifyPattern p1 p2
+  | PFSuc e1 p1, PFSuc e2 p2 => unify e1 e2 >> unifyPattern p1 p2
+  | PPos p1, PPos p2 => unifyPattern p1 p2
+  | PNeg p1, PNeg p2 => unifyPattern p1 p2
+  | PNil _ e1, PNil _ e2 => unify e1 e2
+  | PCons _ e1 t1 h1, PCons _ e2 t2 h2 => unify e1 e2 >> unifyPattern t1 t2 >> unifyPattern h1 h2
+  | PIdp _ e1 v1, PIdp _ e2 v2 => unify e1 e2 >> unifyVar v1 v2
   | _, _ => errUni
 
 \func unifyLetClause (_ _ : LetClause) : Env (\Sigma)

@@ -5,7 +5,7 @@
 \import Set
 \import Arith.Nat
 
-\func \infix 4 ==_B (n m : Nat) : Bool
+\func \infix 4 ==_B (_ _ : Nat) : Bool
   | 0, 0 => true
   | 0, suc m => false
   | suc n, 0 => false

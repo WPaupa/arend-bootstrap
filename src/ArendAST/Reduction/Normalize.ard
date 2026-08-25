@@ -1,8 +1,13 @@
+\import ArendAST.Definition
 \import ArendAST.Expression
 \import ArendAST.Reduction.CompClosure
+\import ArendAST.Reduction.ExprChecker
+\import ArendAST.Typecheck.Env
+\import ArendAST.Typecheck.ExprGetters
 \import Data.Array
 \import Data.Bool
 \import Function.Meta
+\import Utilities.Array
 \import Utilities.Monad
 \import Monad.Do
 \import Data.Maybe
@@ -24,6 +29,10 @@
         (Maybe.map (\lam x => substitute x v e) VEvaluation)
   }) vs
 
+\func substitutes (e : Expr) (vs : Array (\Sigma Var Expr)) : Expr \elim vs
+  | nil => e
+  | (v, e') :: l => substitutes (substitute e v e') l
+
 \func beta (e : Expr) : Expr => compClosure step e \where {
   \func step (e : Expr) : Expr \elim e
     | EApp (ELam (h :: nil) e s) e' isExplicit => substitute e h e'
@@ -37,7 +46,7 @@
     | t => t
 }
 
-\func delta (e : Expr) : Expr => compClosure step e \where {
+\func vareval (e : Expr) : Expr => compClosure step e \where {
   \func step (e : Expr) : Expr \elim e
     | EVar (LocalVar _ _ _ (just e)) => e
     | EVar (GlobalVar _ _ _ (just e)) => e
@@ -50,7 +59,71 @@
     | t => t
 }
 
-\func normalize (e : Expr) : Env Expr => \case normalizeWithFuel e (getFuel e) \with {
+\func iota (e : Expr) : Expr => compClosure step e \where {
+  \func step (e : Expr) : Expr \elim e
+    | ECase false (v :: vs) type lvls match (e :: es) =>
+      ECase false (substVArray vs v e) (substitute type v e) lvls (filterMatch e match) es
+    | ECase false nil type lvls match nil => fromEmptyMatch match
+    | t => t
+
+  \func filterClause (e : Expr) (c : Clause) : Maybe Clause \elim c
+    | cClause (p :: ps) body => Maybe.map (\lam substs => cClause ps (Maybe.map (\lam e => substitutes e substs) body)) (matchExprToPattern e p)
+    | cClause nil body => just $ cClause nil body
+
+  \func filterMatch (e : Expr) (m : Match) : Match \elim m
+    | DoMatch cs => DoMatch (filterMap (filterClause e) cs)
+    | t => t
+
+  \func fromEmptyMatch (_ : Match) : Expr
+    | NoMatch e => e
+    | DoMatch (cClause _ (just e) :: t) => e
+    | _ => EGoal
+}
+
+\func consbeta (e : Expr) : Expr => compClosure step e \where {
+  \func step (e : Expr) : Expr \elim e
+    | ECSuc (ENat m) => ENat (m Nat.+ 1)
+    | ECPos (ENat m) => EInt (pos m)
+    | ECNeg (ENat m) => EInt (neg m)
+    | ECFSuc max (EFin m n) => EFin (ECSuc max) (ECSuc n)
+    | t => t
+}
+
+\func delta (env : CheckEnv) (e : Expr) : Expr => compClosure (step env) e \where {
+  \func step (env : CheckEnv) (e : Expr) : Expr \elim e
+    | EFunCall v pls es => \case getDef env (getVarId v) \with {
+      | just (DFunc f) => \case f.body \with {
+        | just b => ECase f.isSFunc f.params f.resultType nil b es
+        | nothing => EFunCall v pls es
+      }
+      | _ => EFunCall v pls es
+    }
+    | t => t
+}
+
+\func reify (e : Expr) : Expr => compClosure step e \where {
+  \func arr {A : \Type} (x : Array A) : Array A => fromList (toList x)
+  \func stepCs (_ : Array Clause) : Array Clause
+    | nil => nil
+    | (cClause pats body) :: l => cClause (arr pats) body :: stepCs l
+
+  \func step (_ : Expr) : Expr
+    | ELam vs e s => ELam (arr vs) e s
+    | ETuple es t => ETuple (arr es) t
+    | EFunCall v pls as => EFunCall v pls (arr as)
+    | EConsCall v pls ts cs => EConsCall v pls (arr ts) (arr cs)
+    | EDataCall v pls es => EDataCall v pls (arr es)
+    | EClassCall v pls is s this => EClassCall v pls (arr is) s this
+    | EArray pls et es t => EArray pls et (arr es) t
+    | ECase s vs t pls (DoMatch cs) as => ECase s (arr vs) t pls (DoMatch (stepCs cs)) (arr as)
+    | ECase s vs t pls m as => ECase s (arr vs) t pls m (arr as)
+    | EPiType vs e s => EPiType (arr vs) e s
+    | ESigmaType vs s => ESigmaType (arr vs) s
+    | EType t pls cn as u => EType t pls cn (arr as) u
+    | t => t
+}
+
+\func normalize (e : Expr) : Env Expr => askT >>= \lam env => \case normalizeWithFuel env e (getFuel e) \with {
   | nothing => throw ErrOutOfFuel
   | just a => return a
 } \where {
@@ -60,13 +133,20 @@
       | true => reduce l e
       | false => just $ a e
     }
-  \func reductions => beta :: boxred :: delta :: nil
-  \func normalizeWithFuel (e : Expr) (fuel : Nat) : Maybe Expr \elim fuel
+  \func reductions (env : CheckEnv) => vareval :: consbeta :: beta :: boxred :: iota :: delta env :: nil
+  \func normalizeWithFuel (env : CheckEnv) (e : Expr) (fuel : Nat) : Maybe Expr \elim fuel
     | 0 => nothing
-    | suc fuel => \case reduce reductions e \with {
+    | suc fuel => \case reduce (reductions env) e \with {
       | nothing => just e
-      | just a => normalizeWithFuel a fuel
+      | just a => normalizeWithFuel env a fuel
     }
+  \func normalizeWithFuelR (env : CheckEnv) (e : Expr) (fuel : Nat) : Maybe Expr \elim fuel
+    | 0 => nothing
+    | suc fuel => \case reduce (reductions env) e \with {
+      | nothing => just e
+      | just a => normalizeWithFuelR env (reify a) fuel
+    }
+
   \func getFuel (_ : Expr) : Nat
     | ELam _ e _ => getFuel e Nat.* 2
     | EApp e1 e2 s => getFuel e1 Nat.+ getFuel e2

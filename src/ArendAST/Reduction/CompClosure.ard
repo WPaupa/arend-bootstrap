@@ -17,6 +17,15 @@
   | PVar v1 => PVar (closureVar f v1)
   | PConstr v1 a => PConstr (closureVar f v1) (mkArray (\lam i => closurePattern f (a i)))
   | PAbsurd => PAbsurd
+  | PZero => PZero
+  | PFZero max => PFZero (f (closure f max))
+  | PSuc e => PSuc (closurePattern f e)
+  | PFSuc max e => PFSuc (f (closure f max)) (closurePattern f e)
+  | PPos e => PPos (closurePattern f e)
+  | PNeg e => PNeg (closurePattern f e)
+  | PNil pl t => PNil pl (f (closure f t))
+  | PCons pl t e1 e2 => PCons pl (f (closure f t)) (closurePattern f e1) (closurePattern f e2)
+  | PIdp pl t v => PIdp pl (f (closure f t)) (closureVar f v)
 
 \func closureClause (f : Expr -> Expr) (e : Clause) : Clause \elim e
   | cClause pats body => cClause (mkArray (\lam i => closurePattern f (pats i))) (closureMaybe f body)
@@ -38,30 +47,30 @@
   | EVar v1 => EVar $ closureVar f v1
   | EApp e1 e2 isExplicit => EApp (f (closure f e1)) (f (closure f e2)) isExplicit
   | ELam a e resultSort => ELam (mkArray (\lam i => closureVar f (a i))) (f (closure f e)) resultSort
-  | ETuple elements e => ETuple (mkArray (\lam i => closure f (elements i))) (f (closure f e))
+  | ETuple elements e => ETuple (mkArray (\lam i => f (closure f (elements i)))) (f (closure f e))
   | EProj e n isProperty => EProj (f (closure f e)) n isProperty
-  | EFunCall v1 l a => EFunCall (closureVar f v1) l (mkArray (\lam i => closure f (a i)))
+  | EFunCall v1 l a => EFunCall (closureVar f v1) l (mkArray (\lam i => f (closure f (a i))))
   | EConsCall v1 l typeArgs consArgs => EConsCall (closureVar f v1) l
-      (mkArray (\lam i => closure f (typeArgs i))) (mkArray (\lam i => closure f (consArgs i)))
-  | EDataCall v1 l a => EDataCall (closureVar f v1) l (mkArray (\lam i => closure f (a i)))
+      (mkArray (\lam i => f (closure f (typeArgs i)))) (mkArray (\lam i => f (closure f (consArgs i))))
+  | EDataCall v1 l a => EDataCall (closureVar f v1) l (mkArray (\lam i => f (closure f (a i))))
   | EFieldCall v1 e => EFieldCall (closureVar f v1) (f (closure f e))
   | EClassCall v1 l implementations s v2 =>
       EClassCall (closureVar f v1) l (\lam i => closureVar f (implementations i)) s (closureVar f v2)
   | ENew parent e => ENew (closureMaybe f parent) (f (closure f e))
-  | EArray l e elems tail => EArray l (f (closure f e)) (mkArray (\lam i => closure f (elems i))) (closureMaybe f tail)
-  | EArrayType len elemType => EArrayType (f (closure f len)) (f (closure f elemType))
+  | EArray l e elems tail => EArray l (f (closure f e)) (mkArray (\lam i => f (closure f (elems i)))) (closureMaybe f tail)
+  | ETArray pls len elemType => ETArray pls (f (closure f len)) (f (closure f elemType))
   | EPath l e1 e2 => EPath l (f (closure f e1)) (f (closure f e2))
   | EPathAt e1 e2 => EPathAt (f (closure f e1)) (f (closure f e2))
   | EInterval => EInterval
   | ECase isSFunc a e returnLevel m args => ECase isSFunc (mkArray (\lam i => closureVar f (a i)))
-      (f (closure f e)) returnLevel (closureMatch f m) (mkArray (\lam i => closure f (args i)))
+      (f (closure f e)) returnLevel (closureMatch f m) (mkArray (\lam i => f (closure f (args i))))
   | ELet isSFunc a e => ELet isSFunc (mkArray (\lam i => closureLetClause f (a i))) (f (closure f e))
   | ETyped e e1 => ETyped (f (closure f e)) (f (closure f e1))
   | EBox e e1 => EBox (f (closure f e)) (f (closure f e1))
   | EPEval e => EPEval (f (closure f e))
   | EPiType a e s => EPiType (mkArray (\lam i => closureVar f (a i))) (f (closure f e)) s
   | ESigmaType a s => ESigmaType (mkArray (\lam i => closureVar f (a i))) s
-  | EType type l clauseNo args e => EType (closureVar f type) l clauseNo (\lam i => closure f (args i)) (f (closure f e))
+  | EType type l clauseNo args e => EType (closureVar f type) l clauseNo (\lam i => f (closure f (args i))) (f (closure f e))
   | ETypeDestr type e => ETypeDestr (closureVar f type) (f (closure f e))
   | EError m => EError (closureMaybe f m)
   | ETInt => ETInt
@@ -74,5 +83,9 @@
   | EFin m n => EFin (f (closure f m)) (f (closure f n))
   | ENat n => ENat n
   | EString s => EString s
+  | ECSuc e => ECSuc (f (closure f e))
+  | ECFSuc e e1 => ECFSuc (f (closure f e)) (f (closure f e1))
+  | ECPos e => ECPos (f (closure f e))
+  | ECNeg e => ECNeg (f (closure f e))
 
 \func compClosure (f : Expr -> Expr) (e : Expr) : Expr => f (closure f e)

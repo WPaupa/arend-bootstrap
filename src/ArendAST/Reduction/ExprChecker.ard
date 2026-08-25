@@ -1,0 +1,130 @@
+\import ArendAST.Expression
+\import ArendAST.Level
+\import ArendAST.Typecheck.Unify
+\import Data.Array
+\import Data.Bool
+\import Data.Maybe
+\import Utilities.Array
+
+\func makeFuncType (vs : Array Var) (pls : Sort) (ret : Expr) : Expr \elim vs
+  | nil => ret
+  | vs => EPiType vs ret pls
+
+\func evaluation (_ : Var) : Expr
+  | GlobalVar VName VId VType (just eval) => eval
+  | LocalVar VName index VType (just eval) => eval
+  | _ => EGoal
+
+\func isFree (v : Var) (e : Expr) : Bool \elim e
+  | EVar v' => eqVar v v'
+  | EInt i => false
+  | ENat n => false
+  | EString s => false
+  | EFin e e1 => isFree v e or isFree v e1
+  | EApp e1 e2 isExplicit => isFree v e1 or isFree v e2
+  | ELam a e resultSort => omitVars a isFree v e
+  | ETuple elements e => anyIdx elements.len (\lam i => isFree v (elements i)) or isFree v e
+  | EProj e n isProperty => isFree v e
+  | EFunCall v1 a a1 => eqVar v v1 or anyIdx a1.len (\lam i => isFree v (a1 i))
+  | EConsCall v1 a typeArgs consArgs => eqVar v v1 or isFreeArray v typeArgs or isFreeArray v consArgs
+  | EDataCall v1 a a1 => eqVar v v1 or isFreeArray v a1
+  | EFieldCall v1 e => eqVar v v1 or isFree v e
+  | EClassCall v1 a implementations s v2 => eqVar v v1 or omitVar v2 isFreeVarArray v implementations
+  | ENew parent e => isFreeMaybe v parent or isFree v e
+  | EArray a e elems tail => isFree v e or isFreeArray v elems or isFreeMaybe v tail
+  | EPath a e1 e2 => isFree v e1 or isFree v e2
+  | EPathAt e1 e2 => isFree v e1 or isFree v e2
+  | ECase isSFunc a e returnLevel m args => omitVars a isFreeMatch v m or isFreeArray v args
+  | ELet isSFunc a e => {?}
+  | ETyped e e1 => {?}
+  | EBox e e1 => {?}
+  | EPEval e => {?}
+  | EUniv s => {?}
+  | EPiType a e s => {?}
+  | ESigmaType a s => {?}
+  | ETInt => {?}
+  | ETNat => {?}
+  | ETString => {?}
+  | ETFin e => {?}
+  | EInterval => {?}
+  | ETArray pls e e1 => {?}
+  | EType type a clauseNo args e => {?}
+  | ETypeDestr type e => {?}
+  | EError m => {?}
+  | EGoal => {?}
+  | ECSuc e => {?}
+  | ECFSuc e e1 => {?}
+  | ECPos e => {?}
+  | ECNeg e => {?} \where {
+  \func isFreeVar (v : Var) (v' : Var) : Bool \elim v'
+    | GlobalVar VName VId VType (just eval) => isFree v eval
+    | LocalVar VName index VType (just eval) => isFree v eval
+    | _ => false
+
+  \func isFreeMatch (v : Var) (m : Match) : Bool \elim m
+    | NoMatch e => {?}
+    | DoMatch a => {?}
+    | IntervalMatch nparams a fallback => {?}
+
+  \func isFreeMaybe (v : Var) (e : Maybe Expr) : Bool \elim e
+    | nothing => false
+    | just a => isFree v a
+
+  \meta isFreeArray v e => anyIdx e.len (\lam i => isFree v (e i))
+  \meta isFreeVarArray v e => anyIdx e.len (\lam i => isFreeVar v (e i))
+  \meta omitVar v f v' e => not (eqVar v v') and f v' e
+  \meta omitVars v f v' e => not (anyIdx v.len (\lam i => eqVar (v i) v')) and f v' e
+}
+
+\func matchExprToPattern (e : Expr) (p : Pattern) : Maybe (Array (\Sigma Var Expr)) \elim p
+  | PVar v => just ((v, e) :: nil)
+  | PConstr v a => {?}
+  | PAbsurd => just nil
+  | PZero => \case e \with {
+    | ENat 0 => just nil
+    | _ => nothing
+  }
+  | PFZero max => \case e \with {
+    | EFin _ (ENat 0) => just nil
+    | _ => nothing
+  }
+  | PSuc p => \case e \with {
+    | ENat (suc n) => matchExprToPattern (ENat n) p
+    | ECSuc e => matchExprToPattern e p
+    | _ => nothing
+  }
+  | PFSuc max p => \case e \with {
+    | EFin (ENat (suc m)) (ENat (suc n)) => matchExprToPattern (EFin (ENat m) (ENat n)) p
+    | EFin (ECSuc max) (ENat (suc n)) => matchExprToPattern (EFin max (ENat n)) p
+    | EFin (ENat (suc m)) (ECSuc n) => matchExprToPattern (EFin (ENat m) n) p
+    | EFin (ECSuc max) (ECSuc n) => matchExprToPattern (EFin max n) p
+    | _ => nothing
+  }
+  | PPos p => \case e \with {
+    | EInt (pos _) => just nil
+    | EInt (neg 0) => just nil
+    | EInt (neg (suc _)) => nothing
+    | ECPos e => matchExprToPattern e p
+    | _ => nothing
+  }
+  | PNeg p => \case e \with {
+    | EInt (neg _) => just nil
+    | EInt (pos 0) => just nil
+    | EInt (pos (suc _)) => nothing
+    | ECNeg e => matchExprToPattern e p
+    | _ => nothing
+  }
+  | PNil pls elemType => matchNil e
+  | PCons pls elemType p1 p2 => \case e \with {
+    | EArray _ _ (h :: hs) t => {?}
+    | _ => nothing
+  }
+  | PIdp pls type fixedVar => \case e \with {
+    | EPath _ _ (ELam v ex _) => {?}
+    | _ => nothing
+  } \where {
+  \func matchNil (_ : Expr) : Maybe (Array (\Sigma Var Expr))
+    | EArray _ _ nil nothing => just nil
+    | EArray _ _ nil (just e) => matchNil e
+    | _ => nothing
+}

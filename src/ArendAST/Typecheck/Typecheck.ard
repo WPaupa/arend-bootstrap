@@ -183,7 +183,7 @@
     }),
     typecheckMaybe tail,
     -- FUTURE: calculate length of tail
-    return (EArrayType (\case tail \with { | nothing => ENat elems.len | just _ => EGoal }) e)
+    return (ETArray l (\case tail \with { | nothing => ENat elems.len | just _ => EGoal }) e)
   }
   | EPath l e1 e2 => do {
     typecheck e1,
@@ -206,7 +206,7 @@
       | nothing => throw (ErrNotPi tp)
     }
   }
-  | EArrayType len e => do {
+  | ETArray pls len e => do {
     \lam tl => typecheck len,
     unify tl ETNat,
     \lam tf => typecheck e,
@@ -289,6 +289,28 @@
     return (EUniv Set0)
   }
   | ETString => return (EUniv Set0)
+  | ECSuc e => do {
+    \lam tn => typecheck e,
+    unify tn ETNat,
+    return ETNat
+  }
+  | ECFSuc e e1 => do {
+    \lam tm => typecheck e,
+    \lam te => typecheck e1,
+    unify tm ETNat,
+    unify te (ETFin e),
+    return (ETFin e)
+  }
+  | ECPos e => do {
+    \lam tn => typecheck e,
+    unify tn ETNat,
+    return ETInt
+  }
+  | ECNeg e => do {
+    \lam tn => typecheck e,
+    unify tn ETNat,
+    return ETInt
+  }
 
 
 \func typecheckVar (_ : Var) : Env Expr
@@ -349,6 +371,27 @@
       | _ => throw ErrBadPattern
     }
   }
+  | PZero => unify ty ETNat
+  | PFZero max => \case getFinType ty \with {
+    | nothing => throw ErrBadPattern
+    | just a => return ()
+  }
+  | PSuc pat => unify ty ETNat
+  | PFSuc max pat => \case getFinType ty \with {
+    | nothing => throw ErrBadPattern
+    | just a => checkPattern pat (ETFin max)
+  }
+  | PPos pat => unify ty ETInt
+  | PNeg pat => unify ty ETInt
+  | PNil pls elemType => \case getArrayType ty \with {
+    | nothing => throw ErrBadPattern
+    | just (_, elemTy) => unify elemType elemTy
+  }
+  | PCons pls elemType pat1 pat2 => \case getArrayType ty \with {
+    | nothing => throw ErrBadPattern
+    | just (_, elemTy) => unify elemType elemTy >> checkPattern pat1 elemType >> checkPattern pat2 ty
+  }
+  | PIdp pls type fixedVar => unify type ty
 
 \func checkClause (c : Clause) (params : Array Var) (retType : Expr) : Env (\Sigma) \elim c
   | cClause pats body => \case decEqNat pats.len params.len \with {
@@ -359,7 +402,7 @@
       -- a body-less clause must be absurd and vice versa
       checkAbsurd body (patsAnyAbsurd pats),
       -- the body is checked against the return type
-      localT (extendArray (patternArrayVars pats))
+      localT (extendArray (patternArrayVars pats)) -- TODO fix left=right in idp
         (checkBody body (substParams params retType (mkArray (\lam i => patternToExpr (pats i)))))
     }
   }
@@ -378,24 +421,24 @@
   }
 
 \func checkMatch (m : Match) (params : Array Var) (retType : Expr) : Env (\Sigma) \elim m
-  -- FUTURE: check if constructors are of the correct type. Figure out what to do with Nat/Int/Fin
+  -- FUTURE: check if constructors are of the correct type
   | DoMatch clauses => forEachIndexM clauses.len (\lam i => checkClause (clauses i) params retType)
   | IntervalMatch _ _ _ => throw ErrIntervalMatch
   | NoMatch _ => return ()
 
-\func matchPattern (e : Expr) (p : Pattern) : Env (\Sigma) \elim p
-  | PVar _ => return ()
-  | PAbsurd => throw ErrBadPattern
-  | PConstr cv subps => \case e \with {
-    | EConsCall cv' l' ta' ca' => \case getVarId cv ==_B getVarId cv' \with {
+\func matchPattern (_ : Expr) (_ : Pattern) : Env (\Sigma)
+  | EVar _, _ => return ()
+  | _, PVar _ => return ()
+  | _, PAbsurd => throw ErrBadPattern
+  | EConsCall cv' l' ta' ca', PConstr cv subps => \case getVarId cv ==_B getVarId cv' \with {
       | false => throw ErrBadPattern
       | true => \case decEqNat ca'.len subps.len \with {
         | no _   => throw (ErrArity subps.len ca'.len)
         | yes eq => forEachIndexM ca'.len (\lam i => matchPattern (ca' i) (subps (rewriteI eq i)))
       }
     }
-    | _ => return () -- FUTURE: check non-constructor exprs
-  }
+  -- FUTURE: match other kinds of patterns
+  | _, _ => return ()
 
 \func checkConsPatterns (c : ConsDef) (typeArgs : Array Expr) : Env (\Sigma) => \case c.patterns \with {
   | nothing   => return ()
