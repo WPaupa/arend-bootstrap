@@ -1,9 +1,15 @@
+\import Algebra.Meta
 \import ArendAST.Expression
 \import ArendAST.Level
 \import ArendAST.Typecheck.Unify
 \import Data.Array
 \import Data.Bool
 \import Data.Maybe
+\import Arith.Nat
+\import Function.Meta
+\import Paths.Meta
+\import Set
+\import Utilities.Arith
 \import Utilities.Array
 
 \func makeFuncType (vs : Array Var) (pls : Sort) (ret : Expr) : Expr \elim vs
@@ -22,7 +28,7 @@
   | EString s => false
   | EFin e e1 => isFree v e or isFree v e1
   | EApp e1 e2 isExplicit => isFree v e1 or isFree v e2
-  | ELam a e resultSort => omitVars a isFree v e
+  | ELam a e resultSort => isFreeTeleArray v a or omitVars a isFree v e
   | ETuple elements e => anyIdx elements.len (\lam i => isFree v (elements i)) or isFree v e
   | EProj e n isProperty => isFree v e
   | EFunCall v1 a a1 => eqVar v v1 or anyIdx a1.len (\lam i => isFree v (a1 i))
@@ -35,50 +41,95 @@
   | EPath a e1 e2 => isFree v e1 or isFree v e2
   | EPathAt e1 e2 => isFree v e1 or isFree v e2
   | ECase isSFunc a e returnLevel m args => omitVars a isFreeMatch v m or isFreeArray v args
-  | ELet isSFunc a e => {?}
-  | ETyped e e1 => {?}
-  | EBox e e1 => {?}
-  | EPEval e => {?}
-  | EUniv s => {?}
-  | EPiType a e s => {?}
-  | ESigmaType a s => {?}
-  | ETInt => {?}
-  | ETNat => {?}
-  | ETString => {?}
-  | ETFin e => {?}
-  | EInterval => {?}
-  | ETArray pls e e1 => {?}
-  | EType type a clauseNo args e => {?}
-  | ETypeDestr type e => {?}
-  | EError m => {?}
-  | EGoal => {?}
-  | ECSuc e => {?}
-  | ECFSuc e e1 => {?}
-  | ECPos e => {?}
-  | ECNeg e => {?} \where {
+  -- \let clauses are sequential: a clause sees the ones before it, `in` sees them all
+  | ELet isSFunc a e => isFreeLetArray v a or (not (bindsLetArray v a) and isFree v e)
+  | ETyped e e1 => isFree v e or isFree v e1
+  | EBox e e1 => isFree v e or isFree v e1
+  | EPEval e => isFree v e
+  | EUniv s => false
+  | EPiType a e s => isFreeTeleArray v a or omitVars a isFree v e
+  | ESigmaType a s => isFreeTeleArray v a
+  | ETInt => false
+  | ETNat => false
+  | ETString => false
+  | ETFin e => isFree v e
+  | EInterval => false
+  | ETArray pls e e1 => isFree v e or isFree v e1
+  | EType type a clauseNo args e => eqVar v type or isFreeArray v args or isFree v e
+  | ETypeDestr type e => eqVar v type or isFree v e
+  | EError (just e) => isFree v e
+  | EError nothing => false
+  | EGoal => false
+  | ECSuc e => isFree v e
+  | ECFSuc e e1 => isFree v e or isFree v e1
+  | ECPos e => isFree v e
+  | ECNeg e => isFree v e \where {
   \func isFreeVar (v : Var) (v' : Var) : Bool \elim v'
-    | GlobalVar VName VId VType (just eval) => isFree v eval
-    | LocalVar VName index VType (just eval) => isFree v eval
+    | GlobalVar VName VId VType VEvaluation => isFree v VType or isFreeMaybe v VEvaluation
+    | LocalVar VName index VType VEvaluation => isFree v VType or isFreeMaybe v VEvaluation
+
+  \func isFreeLetClause (v : Var) (c : LetClause) : Bool \elim c
+    | cLetClause name body type isSFunc => isFree v body or isFreeMaybe v type
+
+  \func bindsLetClause (v : Var) (c : LetClause) : Bool \elim c
+    | cLetClause name body type isSFunc => bindsLetPattern v name
+
+  \func bindsLetPattern (v : Var) (p : LetPattern) : Bool \elim p
+    | LPName name id => eqVar v (LocalVar "" id EGoal nothing)
+    | LPTuple l => bindsLetPatternArray v l
+    | LPRecord l => anyIdx l.len (\lam i => bindsLetPattern v (l i).2)
+
+  \func isFreeClause (v : Var) (c : Clause) : Bool \elim c
+    | cClause pats body => not (bindsPatternArray v pats) and isFreeMaybe v body
+  -- if v appears in a pattern, then it has to also appear in the type of the match
+
+  \func bindsPattern (v : Var) (p : Pattern) : Bool \elim p
+    | PVar v' => eqVar v v'
+    | PConstr v' a => bindsPatternArray v a
+    | PSuc p => bindsPattern v p
+    | PFSuc max p => bindsPattern v p
+    | PPos p => bindsPattern v p
+    | PNeg p => bindsPattern v p
+    | PCons pls elemType p1 p2 => bindsPattern v p1 or bindsPattern v p2
     | _ => false
 
   \func isFreeMatch (v : Var) (m : Match) : Bool \elim m
-    | NoMatch e => {?}
-    | DoMatch a => {?}
-    | IntervalMatch nparams a fallback => {?}
+    | NoMatch e => isFree v e
+    | DoMatch a => anyIdx a.len (\lam i => isFreeClause v (a i))
+    | IntervalMatch nparams a fallback => false -- this shouldn't be reached
 
   \func isFreeMaybe (v : Var) (e : Maybe Expr) : Bool \elim e
     | nothing => false
     | just a => isFree v a
 
+  \func boundBefore (v : Var) (vs : Array Var) (i : Fin vs.len) : Bool =>
+    anyIdx i (\lam j => eqVar v (vs (toFin j (linarith (fin_< i, fin_< j)))))
+
+  \func letBoundBefore (v : Var) (cs : Array LetClause) (i : Fin cs.len) : Bool =>
+    anyIdx i (\lam j => bindsLetClause v (cs (toFin j (linarith (fin_< i, fin_< j)))))
+
+  -- Iteration over arrays is kept in metas: they are inlined, which keeps the recursion
+  -- structural for the termination checker (a helper taking the array as a parameter does not)
   \meta isFreeArray v e => anyIdx e.len (\lam i => isFree v (e i))
   \meta isFreeVarArray v e => anyIdx e.len (\lam i => isFreeVar v (e i))
+  \meta isFreeTeleArray v vs => anyIdx vs.len (\lam i => isFreeVar v (vs i) and not (boundBefore v vs i))
+  \meta isFreeLetArray v cs => anyIdx cs.len (\lam i => isFreeLetClause v (cs i) and not (letBoundBefore v cs i))
+  \meta bindsLetArray v cs => anyIdx cs.len (\lam i => bindsLetClause v (cs i))
+  \meta bindsLetPatternArray v ps => anyIdx ps.len (\lam i => bindsLetPattern v (ps i))
+  \meta bindsPatternArray v ps => anyIdx ps.len (\lam i => bindsPattern v (ps i))
   \meta omitVar v f v' e => not (eqVar v v') and f v' e
   \meta omitVars v f v' e => not (anyIdx v.len (\lam i => eqVar (v i) v')) and f v' e
 }
 
 \func matchExprToPattern (e : Expr) (p : Pattern) : Maybe (Array (\Sigma Var Expr)) \elim p
   | PVar v => just ((v, e) :: nil)
-  | PConstr v a => {?}
+  | PConstr v a => \case e \with {
+    | EConsCall v1 pls tas cas => if (eqVar v v1) (\case decEqNat a.len cas.len \with {
+      | yes e1 => maybeConcat (mkArray {_} {a.len} (\lam i => matchExprToPattern (cas (rewriteI e1 i)) (a i)))
+      | no n => nothing
+    }) nothing
+    | _ => nothing
+  }
   | PAbsurd => just nil
   | PZero => \case e \with {
     | ENat 0 => just nil
@@ -101,30 +152,34 @@
     | _ => nothing
   }
   | PPos p => \case e \with {
-    | EInt (pos _) => just nil
-    | EInt (neg 0) => just nil
+    | EInt (pos n) => matchExprToPattern (ENat n) p
+    | EInt (neg 0) => matchExprToPattern (ENat 0) p
     | EInt (neg (suc _)) => nothing
     | ECPos e => matchExprToPattern e p
     | _ => nothing
   }
   | PNeg p => \case e \with {
-    | EInt (neg _) => just nil
-    | EInt (pos 0) => just nil
+    | EInt (neg n) => matchExprToPattern (ENat n) p
+    | EInt (pos 0) => matchExprToPattern (ENat 0) p
     | EInt (pos (suc _)) => nothing
     | ECNeg e => matchExprToPattern e p
     | _ => nothing
   }
   | PNil pls elemType => matchNil e
   | PCons pls elemType p1 p2 => \case e \with {
-    | EArray _ _ (h :: hs) t => {?}
+    | EArray pls et (h :: hs) t => maybeConcat (matchExprToPattern h p1 :: matchExprToPattern (EArray pls et hs t) p2 :: nil)
     | _ => nothing
   }
   | PIdp pls type fixedVar => \case e \with {
-    | EPath _ _ (ELam v ex _) => {?}
+    | EPath _ _ (ELam (v :: vs) ex s) => if (isFree v (ELam vs ex s)) nothing (just nil)
     | _ => nothing
   } \where {
   \func matchNil (_ : Expr) : Maybe (Array (\Sigma Var Expr))
     | EArray _ _ nil nothing => just nil
     | EArray _ _ nil (just e) => matchNil e
     | _ => nothing
+  \func maybeConcat {A : \Type} (_ : Array (Maybe (Array A))) : Maybe (Array A)
+    | nil => just nil
+    | just a :: l => Maybe.map (a ++) (maybeConcat l)
+    | nothing :: l => nothing
 }

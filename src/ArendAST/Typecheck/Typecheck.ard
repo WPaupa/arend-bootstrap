@@ -230,8 +230,11 @@
     normalize (substParams params retType args)
   }
   | ELet isSFunc clauses e => do {
-    forEachIndexM clauses.len (\lam i => typecheckLetClause (clauses i)),
     \lam vars => letClausesVars clauses,
+    forEachIndexM clauses.len (\lam i => do {
+      \lam varsi => letClausesVars (take i clauses (linarith (fin_< i))),
+      localT (extendArray varsi) (typecheckLetClause (clauses i))
+    }),
     localT (extendArray vars) (typecheck e)
   }
   | ETyped e t => do {
