@@ -125,3 +125,7 @@
 -- a \Pi/\Sigma sort can be given by an ascribed universe
 \func piSort : Expr => quot { \Pi (x : A$1) -> B$2 x : \5-Type 0 }
 \func piSort_p => println piSort
+
+-- constructor expressions (suc/pos/neg) and patterns (0 -> PZero, suc y -> PSuc)
+\func match => quot {\lam (x y : Nat) => (\case y \with {| 0 => x | suc y => suc x}) : Nat }
+\func match_p => println match

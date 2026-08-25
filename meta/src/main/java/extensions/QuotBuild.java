@@ -47,6 +47,10 @@ public class QuotBuild extends BaseMetaDefinition {
   @Dependency ArendRef ETNat;
   @Dependency ArendRef EFin;
   @Dependency ArendRef ETFin;
+  // Constructor expressions
+  @Dependency ArendRef ECSuc;
+  @Dependency ArendRef ECPos;
+  @Dependency ArendRef ECNeg;
   // Var constructors
   @Dependency ArendRef GlobalVar;
   @Dependency ArendRef LocalVar;
@@ -64,6 +68,10 @@ public class QuotBuild extends BaseMetaDefinition {
   @Dependency ArendRef PVar;
   @Dependency ArendRef PConstr;
   @Dependency ArendRef PAbsurd;
+  @Dependency ArendRef PZero;
+  @Dependency ArendRef PSuc;
+  @Dependency ArendRef PPos;
+  @Dependency ArendRef PNeg;
   // Sort / levels (Arend 1.12: PLevel / HLevel)
   @Dependency ArendRef Sort;
   @Dependency(name = "Sort.lp") ArendRef lp;
@@ -127,6 +135,15 @@ public class QuotBuild extends BaseMetaDefinition {
         return con(HLFin, t.getFields().get(1));
       }
       return con(HLInf);
+    }
+
+    // A chain of p-level encodings -> an Array PLevel.
+    private ConcreteExpression decPLevelList(ConcreteExpression e) {
+      List<ConcreteExpression> out = new ArrayList<>();
+      for (ConcreteExpression c : chain(e)) {
+        out.add(decPLevel(c));
+      }
+      return arr(out);
     }
 
     private int intOf(ConcreteExpression e) {
@@ -205,7 +222,16 @@ public class QuotBuild extends BaseMetaDefinition {
         case QuotMeta.ECASE -> {
           // (isSFunc, params, returnType, returnLevel, match, args)
           return con(ECase, factory.ref(intOf(fs.get(1)) == 1 ? trueRef : falseRef), decTele(fs.get(2)),
-              dec(fs.get(3)), decMaybe(fs.get(4)), decMatch(fs.get(5)), decList(fs.get(6)));
+              dec(fs.get(3)), decPLevelList(fs.get(4)), decMatch(fs.get(5)), decList(fs.get(6)));
+        }
+        case QuotMeta.ECSUC -> {
+          return con(ECSuc, dec(fs.get(1)));
+        }
+        case QuotMeta.ECPOS -> {
+          return con(ECPos, dec(fs.get(1)));
+        }
+        case QuotMeta.ECNEG -> {
+          return con(ECNeg, dec(fs.get(1)));
         }
         case QuotMeta.ETINT -> {
           return con(ETInt);
@@ -279,8 +305,22 @@ public class QuotBuild extends BaseMetaDefinition {
       }
       List<? extends ConcreteExpression> fs = t.getFields();
       int tag = intOf(fs.get(0));
-      if (tag == QuotMeta.P_VAR) {
-        return con(PVar, decVar(fs.get(1)));
+      switch (tag) {
+        case QuotMeta.P_VAR -> {
+          return con(PVar, decVar(fs.get(1)));
+        }
+        case QuotMeta.P_ZERO -> {
+          return con(PZero);
+        }
+        case QuotMeta.P_SUC -> {
+          return con(PSuc, decPattern(fs.get(1)));
+        }
+        case QuotMeta.P_POS -> {
+          return con(PPos, decPattern(fs.get(1)));
+        }
+        case QuotMeta.P_NEG -> {
+          return con(PNeg, decPattern(fs.get(1)));
+        }
       }
       // P_CONSTR
       List<ConcreteExpression> subs = new ArrayList<>();

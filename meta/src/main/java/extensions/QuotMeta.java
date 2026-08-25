@@ -82,6 +82,10 @@ public class QuotMeta implements MetaResolver {
   static final int ETNAT = 19;
   static final int EFIN = 20;
   static final int ETFIN = 21;
+  // Constructor expressions: `suc e`, `pos e`, `neg e` -> ECSuc / ECPos / ECNeg (each = (tag, enc)).
+  static final int ECSUC = 22;
+  static final int ECPOS = 23;
+  static final int ECNEG = 24;
   // List encoding markers (kept distinct from node tags). A list is a cons/nil chain rather than a
   // single tuple, because a one-element tuple `(x)` collapses to `x` in Arend concrete syntax.
   static final int NIL = 100;
@@ -107,9 +111,15 @@ public class QuotMeta implements MetaResolver {
   static final int NO_MATCH = 0;
   static final int DO_MATCH = 1;
   //   Pattern: PVar = (P_VAR, var); PConstr = (P_CONSTR, var, chain); PAbsurd = a bare number.
+  //   The built-in constructor patterns each carry the tag plus one field (a padding number for the
+  //   nullary PZero, a sub-pattern otherwise), so they stay tuples rather than collapsing to a number.
   static final int P_VAR = 0;
   static final int P_CONSTR = 1;
   static final int P_ABSURD = 2;
+  static final int P_ZERO = 3;
+  static final int P_SUC = 4;
+  static final int P_POS = 5;
+  static final int P_NEG = 6;
 
   @Override
   public @Nullable ConcreteExpression resolvePrefix(@NotNull ExpressionResolver resolver, @NotNull ContextData contextData) {
@@ -275,12 +285,17 @@ public class QuotMeta implements MetaResolver {
     // type from an enclosing `(e : ascribed)`; nodes with a type/sort slot absorb it, others wrap in
     // ETyped (see `ascribe`).
     private @Nullable ConcreteExpression enc(ConcreteExpression e, Ctx ctx, @Nullable ConcreteExpression ascribed) {
-      // An `Int` literal is written with the `pos` / `neg` constructor (`pos 3`, `neg 5`); a bare
-      // number literal is a `Nat` (see the ConcreteNumberExpression case), so `pos`/`neg` is how the
-      // two are told apart at parse time.
-      ConcreteExpression intLit = intLiteral(e);
-      if (intLit != null) {
-        return ascribe(intLit, ctx, ascribed);
+      // A unary built-in constructor application `suc e` / `pos e` / `neg e` reifies to a dedicated
+      // constructor-expression node. This is checked before the generic application case so the head
+      // (`suc`/`pos`/`neg`) is not treated as an ordinary variable. A bare number literal is a `Nat`
+      // (see the ConcreteNumberExpression case), so `pos`/`neg` is how `Int` values are written.
+      List<? extends ConcreteArgument> conSeq = e.getArgumentsSequence();
+      if (conSeq.size() == 2 && conSeq.get(0).getExpression() instanceof ConcreteReferenceExpression conHead) {
+        int conTag = constructorExprTag(conHead.getReferent().getRefName());
+        if (conTag >= 0) {
+          ConcreteExpression arg = enc(conSeq.get(1).getExpression(), ctx);
+          return arg == null ? null : ascribe(factory.tuple(List.of(tag(conTag), arg)), ctx, ascribed);
+        }
       }
       ConcreteExpression finLit = finLteral(e, ctx);
       if (finLit != null) {
@@ -451,27 +466,19 @@ public class QuotMeta implements MetaResolver {
       return ascribe(tag(EGOAL), ctx, ascribed);
     }
 
-    // An explicit `Int` literal: `pos <num>` or `neg <num>` (the two `Int` constructors), encoded as
-    // EInt with the signed value. Returns null if `e` is not such an application.
-    private @Nullable ConcreteExpression intLiteral(ConcreteExpression e) {
-      List<? extends ConcreteArgument> seq = e.getArgumentsSequence();
-      if (seq.size() != 2 || !(seq.get(0).getExpression() instanceof ConcreteReferenceExpression head)) {
-        return null;
+    // The constructor-expression tag for a unary built-in constructor name, or -1 if `name` is not
+    // one: `suc` -> ECSuc, `pos` -> ECPos, `neg` -> ECNeg.
+    private int constructorExprTag(String name) {
+      if (name.equals("suc")) {
+        return ECSUC;
       }
-      String name = head.getReferent().getRefName();
-      boolean neg;
       if (name.equals("pos")) {
-        neg = false;
-      } else if (name.equals("neg")) {
-        neg = true;
-      } else {
-        return null;
+        return ECPOS;
       }
-      if (!(seq.get(1).getExpression() instanceof ConcreteNumberExpression num)) {
-        return null;
+      if (name.equals("neg")) {
+        return ECNEG;
       }
-      java.math.BigInteger v = num.getNumber();
-      return factory.tuple(List.of(tag(EINT), factory.number(neg ? v.negate() : v)));
+      return -1;
     }
 
     private @Nullable ConcreteExpression finLteral(ConcreteExpression e, Ctx ctx) {
@@ -616,10 +623,9 @@ public class QuotMeta implements MetaResolver {
       if (retType == null) {
         return null;
       }
-      ConcreteExpression retLevel = encMaybe(caseExpr.getResultTypeLevel(), cur);
-      if (retLevel == null) {
-        return null;
-      }
+      // `returnLevel` is an Array PLevel in the core AST; surface syntax carries no recoverable
+      // PLevels for a case return, so it is always the empty list.
+      ConcreteExpression retLevel = listChain(List.<ConcreteExpression>of());
       // Clauses bind their own pattern variables (in the outer scope, not under the \as-binders).
       List<ConcreteExpression> clauseEncs = new ArrayList<>();
       for (Concrete.FunctionClause fc : caseExpr.getClauses()) {
@@ -696,6 +702,18 @@ public class QuotMeta implements MetaResolver {
         cur[0] = cur[0].push(name, np.type == null ? null : typeEnc);
         return factory.tuple(List.of(tag(P_VAR), encVar(false, name, factory.number(level), typeEnc)));
       }
+      // A numeric pattern `n` is `suc (... (suc zero))` with n `suc`s: PZero wrapped in n PSucs.
+      if (pat instanceof Concrete.NumberPattern num) {
+        int n = num.getNumber();
+        if (n < 0) {
+          return tag(P_ABSURD);
+        }
+        ConcreteExpression acc = factory.tuple(List.of(tag(P_ZERO), tag(0)));
+        for (int i = 0; i < n; i++) {
+          acc = factory.tuple(List.of(tag(P_SUC), acc));
+        }
+        return acc;
+      }
       if (pat instanceof Concrete.ConstructorPattern cp) {
         return encConstrPattern(cp.getConstructor(), cp.getPatterns(), cur);
       }
@@ -720,6 +738,16 @@ public class QuotMeta implements MetaResolver {
 
     private @Nullable ConcreteExpression encConstrPattern(@Nullable ArendRef ctor, List<? extends Concrete.Pattern> argPats, Ctx[] cur) {
       String name = ctor != null ? ctor.getRefName() : "_";
+      // Built-in constructor patterns reify to dedicated Pattern nodes. `zero` is nullary; `suc`/`pos`/
+      // `neg` each wrap a single sub-pattern (whose binders are pushed, keeping de Bruijn levels).
+      if (name.equals("zero") && argPats.isEmpty()) {
+        return factory.tuple(List.of(tag(P_ZERO), tag(0)));
+      }
+      int unaryTag = name.equals("suc") ? P_SUC : name.equals("pos") ? P_POS : name.equals("neg") ? P_NEG : -1;
+      if (unaryTag >= 0 && argPats.size() == 1) {
+        ConcreteExpression sub = encPattern(argPats.get(0), cur);
+        return sub == null ? null : factory.tuple(List.of(tag(unaryTag), sub));
+      }
       int d = name.lastIndexOf('$');
       String cn = d >= 0 ? name.substring(0, d) : name;
       java.math.BigInteger id = d >= 0 && isNat(name.substring(d + 1)) ? new java.math.BigInteger(name.substring(d + 1)) : java.math.BigInteger.ZERO;
