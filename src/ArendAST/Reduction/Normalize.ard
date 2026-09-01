@@ -1,5 +1,6 @@
 \import ArendAST.Definition
 \import ArendAST.Expression
+\import ArendAST.PreludeFuncs
 \import ArendAST.Reduction.CompClosure
 \import ArendAST.Reduction.ExprChecker
 \import ArendAST.Typecheck.Env
@@ -61,8 +62,9 @@
 
 \func iota (e : Expr) : Expr => compClosure step e \where {
   \func step (e : Expr) : Expr \elim e
-    | ECase false (v :: vs) type lvls match (e :: es) =>
-      ECase false (substVArray vs v e) (substitute type v e) lvls (filterMatch e match) es
+    | ECase false (v :: vs) type lvls match (e :: es) => if (isConsForm e)
+      (ECase false (substVArray vs v e) (substitute type v e) lvls (filterMatch e match) es)
+      (ECase false (v :: vs) type lvls match (e :: es))
     | ECase false nil type lvls match nil => fromEmptyMatch match
     | t => t
 
@@ -86,7 +88,37 @@
     | ECPos (ENat m) => EInt (pos m)
     | ECNeg (ENat m) => EInt (neg m)
     | ECFSuc max (EFin m n) => EFin (ECSuc max) (ECSuc n)
+
+    | EFunCall v pls (ENat n :: e :: nil) =>
+      if (eqVar v +NatV) (repeatf n ECSuc e) $
+      EFunCall v pls (ENat n :: e :: nil)
+    | EFunCall v pls (e :: ENat n :: nil) =>
+      if (eqVar v +NatV) (repeatf n ECSuc e) $
+      EFunCall v pls (e :: ENat n :: nil)
     | t => t
+
+  \func repeatf {A : \Type} (n : Nat) (f : A -> A) (x : A) : A \elim n
+    | 0 => x
+    | suc n => f (repeatf n f x)
+}
+
+\func multred (e : Expr) : Expr => compClosure step e \where {
+  \func step (e : Expr) : Expr \elim e
+    | EFunCall v pls (ENat n :: ENat m :: nil) => if (eqVar v *NatV)
+        (ENat (n Nat.* m))
+        (EFunCall v pls (ENat n :: ENat m :: nil))
+    | EFunCall v pls (ENat n :: e :: nil) =>
+      if (eqVar v *NatV) (repeatf1 n (\lam e' => EFunCall +NatV nil (e :: e' :: nil)) (ENat 0) e) $
+      EFunCall v pls (ENat n :: e :: nil)
+    | EFunCall v pls (e :: ENat n :: nil) =>
+      if (eqVar v *NatV) (repeatf1 n (\lam e' => EFunCall +NatV nil (e :: e' :: nil)) (ENat 0) e) $
+      EFunCall v pls (e :: ENat n :: nil)
+    | t => t
+
+  \func repeatf1 {A : \Type} (n : Nat) (f : A -> A) (x : A) (x1 : A) : A \elim n
+    | 0 => x
+    | 1 => x1
+    | suc n => f (repeatf1 n f x x1)
 }
 
 \func delta (env : CheckEnv) (e : Expr) : Expr => compClosure (step env) e \where {
@@ -133,7 +165,7 @@
       | true => reduce l e
       | false => just $ a e
     }
-  \func reductions (env : CheckEnv) => vareval :: consbeta :: beta :: boxred :: iota :: delta env :: nil
+  \func reductions (env : CheckEnv) => vareval :: consbeta :: beta :: boxred :: iota :: delta env :: multred :: nil
   \func normalizeWithFuel (env : CheckEnv) (e : Expr) (fuel : Nat) : Maybe Expr \elim fuel
     | 0 => nothing
     | suc fuel => \case reduce (reductions env) e \with {
@@ -141,7 +173,7 @@
       | just a => normalizeWithFuel env a fuel
     }
   \func normalizeWithFuelR (env : CheckEnv) (e : Expr) (fuel : Nat) : Maybe Expr \elim fuel
-    | 0 => nothing
+    | 0 => just e -- nothing
     | suc fuel => \case reduce (reductions env) e \with {
       | nothing => just e
       | just a => normalizeWithFuelR env (reify a) fuel

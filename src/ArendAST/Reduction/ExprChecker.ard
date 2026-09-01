@@ -12,6 +12,21 @@
 \import Utilities.Arith
 \import Utilities.Array
 
+\func isConsForm (_ : Expr) : Bool
+  | EConsCall _ _ _ ca => allIdx ca.len (\lam i => isConsForm (ca i))
+  | ENat _ => true
+  | EFin _ e => isConsForm e
+  | ECSuc e => isConsForm e
+  | ECFSuc _ e => isConsForm e
+  | EInt _ => true
+  | ECPos e => isConsForm e
+  | ECNeg e => isConsForm e
+  | EArray _ _ nil nothing => true
+  | EArray _ _ nil (just e) => isConsForm e
+  | EArray pls e (h :: hs) t => isConsForm (EArray pls e hs t)
+  | ELam (v :: vs) ex s => isFree v (ELam vs ex s)
+  | _ => false
+
 \func makeFuncType (vs : Array Var) (pls : Sort) (ret : Expr) : Expr \elim vs
   | nil => ret
   | vs => EPiType vs ret pls

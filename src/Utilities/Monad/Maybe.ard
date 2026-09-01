@@ -1,0 +1,9 @@
+\import Data.Maybe
+\import Utilities.Monad
+
+\instance MaybeMonad.{l} : Monad.{l} (\lam A => Maybe A)
+  | return => just
+  | >>= => \case __ \with {
+    | nothing => \lam _ => nothing
+    | just a => __ a
+  }

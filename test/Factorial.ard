@@ -9,46 +9,10 @@
 \import Data.Maybe
 \import Debug.Meta
 \import Function.Meta
-\import Utilities.Monad.Reader
-
-\func +Nat : Definition => DFunc $ \new FuncDef {
-  | name => "+"
-  | id => 1002
-  | params => x :: y :: nil
-  | resultType => ETNat
-  | resultSort => Set0
-  | truncLevel => nothing
-  | body => just $ DoMatch $
-                   cClause (PZero :: PVar z :: nil) (just $ EVar z) ::
-                   cClause (PSuc (PVar t) :: PVar z :: nil) (just $ ECSuc (EFunCall +NatV nil (EVar t :: EVar z :: nil))) :: nil
-  | isSFunc => false
-} \where {
-  \func x => LocalVar "x" 0 ETNat nothing
-  \func y => LocalVar "y" 1 ETNat nothing
-  \func z => LocalVar "z" 2 ETNat nothing
-  \func t => LocalVar "t" 3 ETNat nothing
-}
-\func +NatV : Var => GlobalVar "+" 1002 (EPiType (+Nat.x :: +Nat.y :: nil) ETNat Set0) nothing
-
-\func *Nat : Definition => DFunc $ \new FuncDef {
-  | name => "*"
-  | id => 1003
-  | params => x :: y :: nil
-  | resultType => ETNat
-  | resultSort => Set0
-  | truncLevel => nothing
-  | body => just $ DoMatch $
-                   cClause (PZero :: PVar z :: nil) (just $ ENat 0) ::
-                   cClause (PSuc (PVar t) :: PVar z :: nil)
-                       (just $ EFunCall +NatV nil $ EVar z :: EFunCall *NatV nil (EVar t :: EVar z :: nil) :: nil) :: nil
-  | isSFunc => false
-} \where {
-  \func x => LocalVar "x" 0 ETNat nothing
-  \func y => LocalVar "y" 1 ETNat nothing
-  \func z => LocalVar "z" 2 ETNat nothing
-  \func t => LocalVar "t" 3 ETNat nothing
-}
-\func *NatV : Var => GlobalVar "*" 1003 (EPiType (*Nat.x :: *Nat.y :: nil) ETNat Set0) nothing
+\import Monad.Do
+\import Utilities.Monad
+\import Utilities.Monad.Maybe
+\import ArendAST.PreludeFuncs
 
 \func factorial : Definition => DFunc $ \new FuncDef {
   | name => "!"
@@ -72,16 +36,25 @@
 
 
 \func env+* : CheckEnv \cowith
-  | vars => +NatV :: *NatV :: factorialV :: nil
+  | vars => -- +NatV :: *NatV ::
+                     factorialV :: nil
   | plevels => nil
-  | defs => +Nat :: *Nat :: factorial :: nil
+  | defs => -- +Nat :: *Nat ::
+                     factorial :: nil
 
-\func two+two : Expr => EFunCall +NatV nil (ENat 2 :: ENat 2 :: nil)
-\func four_test => normalize.normalizeWithFuelR env+* two+two 0
+\func two*two : Expr => EFunCall *NatV nil (ENat 2 :: ENat 2 :: nil)
+\func four_test => normalize.normalizeWithFuelR env+* two*two 5
 \func four_p => println four_test
 
 
 \func factorial2 : Expr => EFunCall factorialV nil (ENat 2 :: nil)
-\func factorial2_test => normalize.normalizeWithFuelR env+* factorial2 4
+\func factorial2_test => normalize.normalizeWithFuelR env+* factorial2 6
 \func factorial2_print => println factorial2_test
 
+\func fac2Step : Expr => EFunCall *NatV nil (ENat 2 ::
+  ECase false nil ETNat nil  (DoMatch (cClause nil  (just
+      (EFunCall *NatV nil (ECSuc (ENat 0) ::
+      EFunCall factorialV nil (ENat 0 :: nil) :: nil))) ::
+  nil)) nil :: nil)
+\func fac2_fin => normalize.normalizeWithFuelR env+* fac2Step 6
+\func fac2_p => println fac2_fin

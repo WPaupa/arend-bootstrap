@@ -15,6 +15,10 @@
   | 0     => false
   | suc n => f 0 or anyIdx n (\lam i => f (suc i))
 
+\func allIdx (n : Nat) (f : Fin n -> Bool) : Bool \elim n
+  | 0     => false
+  | suc n => f 0 and allIdx n (\lam i => f (suc i))
+
 \func concatIdx {A : \Type} (n : Nat) (f : Fin n -> Array A) : Array A \elim n
   | 0     => nil
   | suc n => f 0 ++ concatIdx n (\lam i => f (suc i))
