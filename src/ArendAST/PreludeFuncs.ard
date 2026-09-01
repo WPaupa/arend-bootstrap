@@ -1,0 +1,45 @@
+\import ArendAST.Definition
+\import ArendAST.Expression
+\import ArendAST.Level
+\import Data.Bool
+\import Data.Maybe
+\import Function.Meta
+
+\func +Nat : Definition => DFunc $ \new FuncDef {
+  | name => "+"
+  | id => 1002
+  | params => x :: y :: nil
+  | resultType => ETNat
+  | resultSort => Set0
+  | truncLevel => nothing
+  | body => just $ DoMatch $
+  cClause (PZero :: PVar z :: nil) (just $ EVar z) ::
+  cClause (PSuc (PVar t) :: PVar z :: nil) (just $ ECSuc (EFunCall +NatV nil (EVar t :: EVar z :: nil))) :: nil
+  | isSFunc => false
+} \where {
+  \func x => LocalVar "x" 0 ETNat nothing
+  \func y => LocalVar "y" 1 ETNat nothing
+  \func z => LocalVar "z" 2 ETNat nothing
+  \func t => LocalVar "t" 3 ETNat nothing
+}
+\func +NatV : Var => GlobalVar "+" 1002 (EPiType (+Nat.x :: +Nat.y :: nil) ETNat Set0) nothing
+
+\func *Nat : Definition => DFunc $ \new FuncDef {
+  | name => "*"
+  | id => 1003
+  | params => x :: y :: nil
+  | resultType => ETNat
+  | resultSort => Set0
+  | truncLevel => nothing
+  | body => just $ DoMatch $
+  cClause (PZero :: PVar z :: nil) (just $ ENat 0) ::
+  cClause (PSuc (PVar t) :: PVar z :: nil)
+  (just $ EFunCall +NatV nil $ EVar z :: EFunCall *NatV nil (EVar t :: EVar z :: nil) :: nil) :: nil
+  | isSFunc => false
+} \where {
+  \func x => LocalVar "x" 0 ETNat nothing
+  \func y => LocalVar "y" 1 ETNat nothing
+  \func z => LocalVar "z" 2 ETNat nothing
+  \func t => LocalVar "t" 3 ETNat nothing
+}
+\func *NatV : Var => GlobalVar "*" 1003 (EPiType (*Nat.x :: *Nat.y :: nil) ETNat Set0) nothing
