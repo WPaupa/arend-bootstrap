@@ -155,7 +155,7 @@
     | t => t
 }
 
-\func normalize (e : Expr) : Env Expr => askT >>= \lam env => \case normalizeWithFuel env e (getFuel e) \with {
+\func normalize (e : Expr) : Env Expr => askT >>= \lam env => \case normalizeWithFuelR env e (getFuel e) \with {
   | nothing => throw ErrOutOfFuel
   | just a => return a
 } \where {
@@ -173,7 +173,7 @@
       | just a => normalizeWithFuel env a fuel
     }
   \func normalizeWithFuelR (env : CheckEnv) (e : Expr) (fuel : Nat) : Maybe Expr \elim fuel
-    | 0 => just e -- nothing
+    | 0 => nothing
     | suc fuel => \case reduce (reductions env) e \with {
       | nothing => just e
       | just a => normalizeWithFuelR env (reify a) fuel

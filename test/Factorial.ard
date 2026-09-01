@@ -48,13 +48,84 @@
 
 
 \func factorial2 : Expr => EFunCall factorialV nil (ENat 2 :: nil)
-\func factorial2_test => normalize.normalizeWithFuelR env+* factorial2 6
-\func factorial2_print => println factorial2_test
+\func step1 => maybe EGoal reify (normalize.reduce (normalize.reductions env+*) factorial2)
+\func step1r => ECase false (LocalVar "x" 0 ETNat (nothing {Expr}) :: nil) ETNat nil
+    (DoMatch (cClause (PZero :: nil) (just {Expr} (ENat 1)) :: cClause (PSuc (PVar (LocalVar "y" 1 ETNat (nothing {Expr}))) :: nil)  (just {Expr}
+        (EFunCall *NatV nil (ECSuc (EVar (LocalVar "y" 1 ETNat (nothing {Expr}))) ::
+        EFunCall factorialV nil (EVar (LocalVar "y" 1 ETNat (nothing {Expr})) :: nil) ::
+        nil))) :: nil)) (ENat 2 :: nil)
+\func ass1 : step1 = step1r => idp
+\func step2 => maybe EGoal reify (normalize.reduce (normalize.reductions env+*) step1r)
+\func step2r => ECase false nil ETNat nil
+    (DoMatch (cClause nil  (just {Expr}
+        (EFunCall *NatV nil (ECSuc (ENat 1) ::
+        EFunCall factorialV nil (ENat 1 :: nil) :: nil))) ::
+    nil)) nil
+\func ass2 : step2 = step2r => idp
 
-\func fac2Step : Expr => EFunCall *NatV nil (ENat 2 ::
-  ECase false nil ETNat nil  (DoMatch (cClause nil  (just
-      (EFunCall *NatV nil (ECSuc (ENat 0) ::
-      EFunCall factorialV nil (ENat 0 :: nil) :: nil))) ::
-  nil)) nil :: nil)
-\func fac2_fin => normalize.normalizeWithFuelR env+* fac2Step 6
-\func fac2_p => println fac2_fin
+\func step3 => maybe EGoal reify (normalize.reduce (normalize.reductions env+*) step2r)
+\func step3r => ECase false nil ETNat nil
+    (DoMatch (cClause nil  (just {Expr}
+        (EFunCall *NatV nil (ENat 2 ::
+        EFunCall factorialV nil (ENat 1 :: nil) :: nil))) ::
+    nil)) nil
+\func ass3 : step3 = step3r => idp
+
+\func step4 => maybe EGoal reify (normalize.reduce (normalize.reductions env+*) step3r)
+\func step4r => EFunCall *NatV nil (ENat 2 :: EFunCall factorialV nil (ENat 1 :: nil) :: nil)
+\func ass4 : step4 = step4r => idp
+
+\func step5 => maybe EGoal reify (normalize.reduce (normalize.reductions env+*) step4r)
+\func step5r => EFunCall *NatV nil (ENat 2 ::
+ECase false (LocalVar "x" 0 ETNat (nothing {Expr}) :: nil) ETNat nil
+    (DoMatch (cClause (PZero :: nil) (just {Expr} (ENat 1)) :: cClause (PSuc (PVar (LocalVar "y" 1 ETNat (nothing {Expr}))) :: nil)  (just {Expr}
+        (EFunCall *NatV nil (ECSuc (EVar (LocalVar "y" 1 ETNat (nothing {Expr}))) ::
+        EFunCall factorialV nil (EVar (LocalVar "y" 1 ETNat (nothing {Expr})) :: nil) ::
+        nil))) :: nil)) (ENat 1 :: nil) :: nil)
+\func ass5 : step5 = step5r => idp 
+
+\func step6 => maybe EGoal reify (normalize.reduce (normalize.reductions env+*) step5r)
+\func step6r => EFunCall *NatV nil (ENat 2 :: 
+ECase false nil ETNat nil
+    (DoMatch (cClause nil  (just {Expr}
+        (EFunCall *NatV nil (ECSuc (ENat 0) ::
+        EFunCall factorialV nil (ENat 0 :: nil) :: nil))) ::
+    nil)) nil :: nil)
+\func ass6 : step6 = step6r => idp
+
+\func step7 => maybe EGoal reify (normalize.reduce (normalize.reductions env+*) step6r)
+\func step7r => EFunCall *NatV nil (ENat 2 ::
+ECase false nil ETNat nil
+    (DoMatch (cClause nil  (just {Expr}
+        (EFunCall *NatV nil (ENat 1 ::
+        EFunCall factorialV nil (ENat 0 :: nil) :: nil))) ::
+    nil)) nil :: nil)
+\func ass7 : step7 = step7r => idp
+
+\func step8 => maybe EGoal reify (normalize.reduce (normalize.reductions env+*) step7r)
+\func step8r => EFunCall *NatV nil (ENat 2 :: EFunCall *NatV nil (ENat 1 :: EFunCall factorialV nil (ENat 0 :: nil) :: nil) :: nil)
+\func ass8 : step8 = step8r => idp
+
+\func step9 => maybe EGoal reify (normalize.reduce (normalize.reductions env+*) step8r)
+\func step9r => EFunCall *NatV nil (ENat 2 ::
+EFunCall *NatV nil (ENat 1 ::
+ECase false (LocalVar "x" 0 ETNat (nothing {Expr}) :: nil) ETNat nil
+    (DoMatch (cClause (PZero :: nil) (just {Expr} (ENat 1)) :: cClause (PSuc (PVar (LocalVar "y" 1 ETNat (nothing {Expr}))) :: nil)  (just {Expr}
+        (EFunCall *NatV nil (ECSuc (EVar (LocalVar "y" 1 ETNat (nothing {Expr}))) ::
+        EFunCall factorialV nil (EVar (LocalVar "y" 1 ETNat (nothing {Expr})) :: nil) ::
+        nil))) :: nil)) (ENat 0 :: nil) :: nil) :: nil)
+\func ass9 : step9 = step9r => idp
+
+\func step10 => maybe EGoal reify (normalize.reduce (normalize.reductions env+*) step9r)
+\func step10r => EFunCall *NatV nil (ENat 2 ::
+EFunCall *NatV nil (ENat 1 :: ECase false nil ETNat nil (DoMatch (cClause nil (just {Expr} (ENat 1)) :: nil)) nil :: nil) ::
+nil)
+\func ass10 : step10 = step10r => idp
+
+\func step11 => maybe EGoal reify (normalize.reduce (normalize.reductions env+*) step10r)
+\func step11r => EFunCall *NatV nil (ENat 2 :: EFunCall *NatV nil (ENat 1 :: ENat 1 :: nil) :: nil)
+\func ass11 : step11 = step11r => idp
+
+\func step12 => maybe EGoal reify (normalize.reduce (normalize.reductions env+*) step11r)
+\func step12r => ENat 2
+\func ass12 : step12 = step12r => idp
